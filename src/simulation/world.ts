@@ -2,6 +2,8 @@ import type { Organism, SimulationConfig, WorldState } from "./types";
 import { createOrganism, updateOrganism } from "./organism";
 import { spawnFood } from "./food";
 import { SpatialGrid } from "./spatial-grid";
+import { updateSocieties } from "./society";
+import { updateStructures } from "./infrastructure";
 
 const FOOD_SPAWN_MARGIN = 500;
 
@@ -13,6 +15,10 @@ export function createSimulation(config: SimulationConfig): WorldState {
     food: [],
     tick: 0,
     nextId: 0,
+    societies: [],
+    structures: [],
+    nextSocietyId: 0,
+    nextStructureId: 0,
   };
 
   // Spawn initial organisms centered around origin
@@ -31,6 +37,7 @@ export function createSimulation(config: SimulationConfig): WorldState {
     org.awareness = Math.random();
     org.efficiency = 0.5 + Math.random() * 1.5;
     org.riskTolerance = Math.random();
+    org.socialAffinity = Math.random();
     world.organisms.push(org);
   }
 
@@ -162,8 +169,20 @@ export function step(world: WorldState, config: SimulationConfig): void {
     }
   }
 
+  // Rebuild organism grid after removals and additions
+  orgGrid.clear();
+  for (let i = 0; i < world.organisms.length; i++) {
+    orgGrid.insert(world.organisms[i].x, world.organisms[i].y, i);
+  }
+
   // Carrying capacity pressure — local density drains energy
   applyDensityPressure(world, orgGrid);
+
+  // Update societies (formation, roles, cooperation)
+  updateSocieties(world, config, orgGrid);
+
+  // Update structures (building, decay, farm food)
+  updateStructures(world, config);
 
   // Spawn new food around population
   spawnFood(world, config);
@@ -181,6 +200,7 @@ export function step(world: WorldState, config: SimulationConfig): void {
       org.awareness = Math.random();
       org.efficiency = 0.5 + Math.random() * 1.5;
       org.riskTolerance = Math.random();
+      org.socialAffinity = Math.random();
       world.organisms.push(org);
     }
   }
@@ -199,7 +219,19 @@ function applyDensityPressure(world: WorldState, orgGrid: SpatialGrid): void {
     const neighborCount = nearby.length - 1;
     if (neighborCount > DENSITY_PRESSURE_THRESHOLD) {
       const excess = neighborCount - DENSITY_PRESSURE_THRESHOLD;
-      org.energy -= excess * DENSITY_PRESSURE_COST;
+      // Same-society neighbors cost half (cooperation advantage)
+      if (org.societyId !== null) {
+        let sameCount = 0;
+        for (const idx of nearby) {
+          const other = world.organisms[idx];
+          if (other.id !== org.id && other.societyId === org.societyId) sameCount++;
+        }
+        const otherExcess = Math.max(0, neighborCount - sameCount - DENSITY_PRESSURE_THRESHOLD);
+        const sameExcess = excess - otherExcess;
+        org.energy -= otherExcess * DENSITY_PRESSURE_COST + Math.max(0, sameExcess) * 0.15;
+      } else {
+        org.energy -= excess * DENSITY_PRESSURE_COST;
+      }
     }
   }
 }

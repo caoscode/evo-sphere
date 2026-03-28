@@ -202,10 +202,15 @@ function SelectedOrganism({
     awareness: number;
     efficiency: number;
     riskTolerance: number;
+    socialAffinity: number;
     state: string;
     generation: number;
     age: number;
     abilities: string[];
+    role: string;
+    societyId: number | null;
+    societySize: number;
+    sharedPool: number;
   } | null>(null);
 
   useEffect(() => {
@@ -221,6 +226,10 @@ function SelectedOrganism({
         selectedIdRef.current = null;
         return;
       }
+      const society =
+        org.societyId !== null
+          ? worldRef.current.societies.find((s) => s.id === org.societyId)
+          : null;
       setInfo({
         id: org.id,
         energy: org.energy,
@@ -231,10 +240,15 @@ function SelectedOrganism({
         awareness: org.awareness,
         efficiency: org.efficiency,
         riskTolerance: org.riskTolerance,
+        socialAffinity: org.socialAffinity,
         state: org.state,
         generation: org.generation,
         age: org.age,
         abilities: org.abilities.map((a) => `${a.type}${a.active ? "*" : ""}`),
+        role: org.role,
+        societyId: org.societyId,
+        societySize: society?.memberIds.size ?? 0,
+        sharedPool: society?.sharedPool ?? 0,
       });
     }, 250);
     return () => clearInterval(interval);
@@ -284,11 +298,33 @@ function SelectedOrganism({
         <span>Risk</span>
         <span>{info.riskTolerance.toFixed(2)}</span>
       </div>
+      <div className="stat-row">
+        <span>Social</span>
+        <span>{info.socialAffinity.toFixed(2)}</span>
+      </div>
       {info.abilities.length > 0 && (
         <div className="stat-row">
           <span>Abilities</span>
           <span>{info.abilities.join(", ")}</span>
         </div>
+      )}
+      {info.societyId !== null && (
+        <>
+          <div className="stat-divider" />
+          <div className="stat-label">Society #{info.societyId}</div>
+          <div className="stat-row">
+            <span>Role</span>
+            <span>{info.role}</span>
+          </div>
+          <div className="stat-row">
+            <span>Members</span>
+            <span>{info.societySize}</span>
+          </div>
+          <div className="stat-row">
+            <span>Shared Pool</span>
+            <span>{info.sharedPool.toFixed(1)}</span>
+          </div>
+        </>
       )}
     </div>
   );

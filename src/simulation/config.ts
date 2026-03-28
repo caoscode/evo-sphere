@@ -11,6 +11,10 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   mutationRate: 0.15,
   maxOrganisms: 500,
   maxFood: 400,
+  maxStructures: 100,
+  societyFormationRadius: 120,
+  minSocietySize: 3,
+  structureDecayRate: 0.02,
 };
 
 // Energy cost coefficients
@@ -39,6 +43,7 @@ export const TRAIT_RANGES = {
   awareness: [0, 1],
   efficiency: [0.5, 2.0],
   riskTolerance: [0, 1],
+  socialAffinity: [0, 1],
 } as const;
 
 // Initial trait values for first generation
@@ -51,4 +56,11 @@ export const INITIAL_TRAITS = {
   awareness: 0.3,
   efficiency: 1.0,
   riskTolerance: 0.5,
+  socialAffinity: 0.5,
 };
+
+// Society constants
+export const SOCIETY_JOIN_TICKS = 10;
+export const SOCIETY_FORM_TICKS = 15;
+export const SOCIETY_LEAVE_DISTANCE = 200;
+export const MAX_SOCIETY_SIZE = 30;

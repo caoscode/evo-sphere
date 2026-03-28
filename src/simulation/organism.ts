@@ -1,4 +1,11 @@
-import type { BehaviorState, Food, Organism, SimulationConfig, WorldState } from "./types";
+import type {
+  BehaviorState,
+  Food,
+  Organism,
+  SimulationConfig,
+  Structure,
+  WorldState,
+} from "./types";
 import {
   AGGRESSION_COST_FACTOR,
   AWARENESS_COST_FACTOR,
@@ -29,7 +36,8 @@ type TraitKeys =
   | "aggression"
   | "awareness"
   | "efficiency"
-  | "riskTolerance";
+  | "riskTolerance"
+  | "socialAffinity";
 
 export interface UpdateResult {
   eatenFoodIndices: number[];
@@ -66,33 +74,69 @@ export function createOrganism(
     state: "FORAGING",
     abilities: [],
     trail: [],
+    societyId: null,
+    role: "none",
+    socialAffinity: traits?.socialAffinity ?? INITIAL_TRAITS.socialAffinity,
+    proximityTimer: 0,
+    buildContribution: 0,
   };
 }
 
 // --- State evaluation ---
 
-function evaluateState(
+interface SocietyContext {
+  centroidX: number;
+  centroidY: number;
+  buildSite: { x: number; y: number } | null;
+  defenderCount: number;
+}
+
+function findNearestThreat(
   organism: Organism,
   nearbyOrgs: { org: Organism; dSq: number }[],
-  nearestFood: Food | null,
-): BehaviorState {
-  // Check for threats (high-aggression organisms with more energy)
+): { x: number; y: number; dSq: number } | null {
   const awarenessRange = organism.vision * organism.awareness;
-  let hasThreat = false;
+  const awarenessRangeSq = awarenessRange * awarenessRange;
+  let closest: { x: number; y: number; dSq: number } | null = null;
   for (const { org: other, dSq: d } of nearbyOrgs) {
     if (
       other.aggression > 0.5 &&
       other.energy > organism.energy &&
-      d < awarenessRange * awarenessRange
+      other.societyId !== organism.societyId &&
+      d < awarenessRangeSq &&
+      (closest === null || d < closest.dSq)
     ) {
-      hasThreat = true;
-      break;
+      closest = { x: other.x, y: other.y, dSq: d };
     }
   }
+  return closest;
+}
+
+function evaluateState(
+  organism: Organism,
+  nearbyOrgs: { org: Organism; dSq: number }[],
+  nearestFood: Food | null,
+  societyCtx: SocietyContext | null,
+): BehaviorState {
+  const threat = findNearestThreat(organism, nearbyOrgs);
+  const hasThreat = threat !== null;
 
   // FLEEING takes highest priority if not very risk-tolerant
   if (hasThreat && organism.riskTolerance < 0.7) {
     return "FLEEING";
+  }
+
+  // Society role overrides (only when in a society and not fleeing)
+  if (organism.societyId !== null && societyCtx) {
+    if (organism.role === "defender" && hasThreat) {
+      return "DEFENDING";
+    }
+    if (organism.role === "builder" && societyCtx.buildSite) {
+      return "BUILDING";
+    }
+    if (organism.role === "farmer" && nearestFood) {
+      return "GATHERING";
+    }
   }
 
   // HUNTING if aggressive and there's a weaker organism nearby
@@ -110,6 +154,11 @@ function evaluateState(
     if (d < CONTACT_RADIUS * CONTACT_RADIUS * 4) {
       return "FEEDING";
     }
+  }
+
+  // Society members with no specific task drift toward centroid
+  if (organism.societyId !== null && societyCtx) {
+    return "COOPERATING";
   }
 
   return "FORAGING";
@@ -154,9 +203,12 @@ function executeBehavior(
   organism: Organism,
   nearbyOrgs: { org: Organism; dSq: number }[],
   nearestFood: Food | null,
+  societyCtx: SocietyContext | null,
 ): void {
   switch (organism.state) {
-    case "FORAGING": {
+    case "FORAGING":
+    case "GATHERING": {
+      // GATHERING behaves like FORAGING (energy deposit handled in eat step)
       if (nearestFood) {
         steerToward(organism, nearestFood.x, nearestFood.y, 1.0);
       } else {
@@ -177,7 +229,6 @@ function executeBehavior(
       if (target) {
         steerToward(organism, target.x, target.y, 1.1);
       } else {
-        // No target, fall back to foraging behavior
         if (nearestFood) {
           steerToward(organism, nearestFood.x, nearestFood.y, 1.0);
         } else {
@@ -187,36 +238,103 @@ function executeBehavior(
       break;
     }
     case "FLEEING": {
-      // Flee from nearest high-aggression threat
-      let threatX = organism.x;
-      let threatY = organism.y;
-      let closestThreatDSq = Infinity;
-      const awarenessRange = organism.vision * organism.awareness;
-      for (const { org: other, dSq: d } of nearbyOrgs) {
-        if (
-          other.aggression > 0.5 &&
-          other.energy > organism.energy &&
-          d < awarenessRange * awarenessRange &&
-          d < closestThreatDSq
-        ) {
-          closestThreatDSq = d;
-          threatX = other.x;
-          threatY = other.y;
-        }
-      }
-      if (closestThreatDSq < Infinity) {
-        steerAwayFrom(organism, threatX, threatY, 1.2);
+      const threat = findNearestThreat(organism, nearbyOrgs);
+      if (threat) {
+        steerAwayFrom(organism, threat.x, threat.y, 1.2);
       } else {
         wander(organism);
       }
       break;
     }
     case "FEEDING": {
-      // Slow down while feeding
       organism.vx *= 0.3;
       organism.vy *= 0.3;
       break;
     }
+    case "BUILDING": {
+      if (societyCtx?.buildSite) {
+        const site = societyCtx.buildSite;
+        const d = distSq(organism.x, organism.y, site.x, site.y);
+        if (d < 100) {
+          // Close to site: slow down and contribute
+          organism.vx *= 0.2;
+          organism.vy *= 0.2;
+        } else {
+          steerToward(organism, site.x, site.y, 0.8);
+        }
+      } else {
+        wander(organism);
+      }
+      break;
+    }
+    case "DEFENDING": {
+      // Steer toward midpoint between threat and society centroid
+      const threat = findNearestThreat(organism, nearbyOrgs);
+      if (threat && societyCtx) {
+        const midX = (threat.x + societyCtx.centroidX) / 2;
+        const midY = (threat.y + societyCtx.centroidY) / 2;
+        steerToward(organism, midX, midY, 1.1);
+      } else if (societyCtx) {
+        steerToward(organism, societyCtx.centroidX, societyCtx.centroidY, 0.5);
+      } else {
+        wander(organism);
+      }
+      break;
+    }
+    case "COOPERATING": {
+      // Gentle drift toward society centroid, with some foraging
+      if (nearestFood) {
+        steerToward(organism, nearestFood.x, nearestFood.y, 1.0);
+      } else if (societyCtx) {
+        steerToward(organism, societyCtx.centroidX, societyCtx.centroidY, 0.3);
+      } else {
+        wander(organism);
+      }
+      break;
+    }
+  }
+}
+
+// --- Society helpers ---
+
+function depositToStorage(
+  world: WorldState,
+  societyId: number,
+  x: number,
+  y: number,
+  amount: number,
+): void {
+  let bestStructure: Structure | null = null;
+  let bestDist = Infinity;
+  for (const s of world.structures) {
+    if (s.societyId === societyId && s.type === "storage" && s.buildProgress >= 1) {
+      const d = distSq(x, y, s.x, s.y);
+      if (d < 1600 && d < bestDist) {
+        // within 40 units
+        bestDist = d;
+        bestStructure = s;
+      }
+    }
+  }
+  if (bestStructure && bestStructure.storedEnergy < 500) {
+    bestStructure.storedEnergy = Math.min(500, bestStructure.storedEnergy + amount);
+  } else {
+    // Deposit to shared pool instead
+    const society = world.societies.find((s) => s.id === societyId);
+    if (society) society.sharedPool += amount;
+  }
+}
+
+function getBuildCost(type: string): number {
+  switch (type) {
+    case "home":
+      return 30;
+    case "storage":
+      return 40;
+    case "farm":
+      return 50;
+    default:
+      return 40;
   }
 }
 
@@ -292,11 +410,46 @@ export function updateOrganism(
     }
   }
 
-  // 6. Evaluate state
-  organism.state = evaluateState(organism, nearbyOrgs, effectiveNearestFood);
+  // 6. Build society context
+  let societyCtx: SocietyContext | null = null;
+  if (organism.societyId !== null) {
+    const society = world.societies.find((s) => s.id === organism.societyId);
+    if (society) {
+      // Find build site: first incomplete structure for this society
+      let buildSite: { x: number; y: number } | null = null;
+      for (const s of world.structures) {
+        if (s.societyId === society.id && s.buildProgress < 1) {
+          buildSite = { x: s.x, y: s.y };
+          break;
+        }
+      }
+      // Also count nearby structures needing repair as build targets
+      if (!buildSite) {
+        for (const s of world.structures) {
+          if (s.societyId === society.id && s.health < s.maxHealth * 0.8) {
+            buildSite = { x: s.x, y: s.y };
+            break;
+          }
+        }
+      }
+      let defenderCount = 0;
+      for (const org2 of world.organisms) {
+        if (org2.societyId === society.id && org2.role === "defender") defenderCount++;
+      }
+      societyCtx = {
+        centroidX: society.centroidX,
+        centroidY: society.centroidY,
+        buildSite,
+        defenderCount,
+      };
+    }
+  }
 
-  // 7. Execute behavior (sets velocity)
-  executeBehavior(organism, nearbyOrgs, effectiveNearestFood);
+  // 7. Evaluate state
+  organism.state = evaluateState(organism, nearbyOrgs, effectiveNearestFood, societyCtx);
+
+  // 8. Execute behavior (sets velocity)
+  executeBehavior(organism, nearbyOrgs, effectiveNearestFood, societyCtx);
 
   // 8. Apply speed modifier from abilities (burstSpeed)
   organism.vx *= mods.speedMultiplier;
@@ -306,37 +459,95 @@ export function updateOrganism(
   organism.x += organism.vx;
   organism.y += organism.vy;
 
-  // 10. Metabolize
+  // 10. Metabolize (home structures reduce cost by 5%)
+  let homeCostMult = 1.0;
+  if (organism.societyId !== null) {
+    for (const s of world.structures) {
+      if (
+        s.societyId === organism.societyId &&
+        s.type === "home" &&
+        s.buildProgress >= 1 &&
+        distSq(organism.x, organism.y, s.x, s.y) < 3600 // 60^2
+      ) {
+        homeCostMult = 0.95;
+        break;
+      }
+    }
+  }
   const cost =
     (organism.metabolism +
       organism.speed * SPEED_COST_FACTOR +
       organism.vision * VISION_COST_FACTOR +
       organism.aggression * AGGRESSION_COST_FACTOR +
       organism.awareness * AWARENESS_COST_FACTOR) *
-    config.energyCostMultiplier;
+    config.energyCostMultiplier *
+    homeCostMult;
   organism.energy -= cost;
 
   // 11. Energy drain ability
   applyEnergyDrain(organism, nearbyOrgs);
 
-  // 12. Eat food
+  // 12. Eat food — farmers deposit 15% to nearest storage
   for (const idx of foodCandidates) {
     const f = food[idx];
-    const dSq = distSq(organism.x, organism.y, f.x, f.y);
-    if (dSq < CONTACT_RADIUS * CONTACT_RADIUS) {
-      organism.energy += f.energy * organism.efficiency;
+    const d = distSq(organism.x, organism.y, f.x, f.y);
+    if (d < CONTACT_RADIUS * CONTACT_RADIUS) {
+      const gained = f.energy * organism.efficiency;
+      if (organism.role === "farmer" && organism.societyId !== null) {
+        const deposit = gained * 0.15;
+        organism.energy += gained - deposit;
+        // Find nearest storage structure
+        depositToStorage(world, organism.societyId, organism.x, organism.y, deposit);
+      } else {
+        organism.energy += gained;
+      }
       eatenFoodIndices.push(idx);
     }
   }
 
+  // 12b. Builder contribution to structures
+  if (organism.state === "BUILDING" && societyCtx?.buildSite) {
+    const site = societyCtx.buildSite;
+    const d = distSq(organism.x, organism.y, site.x, site.y);
+    if (d < 100) {
+      // Within 10 units of build site
+      for (const s of world.structures) {
+        if (s.societyId === organism.societyId && distSq(s.x, s.y, site.x, site.y) < 1) {
+          if (s.buildProgress < 1) {
+            s.buildProgress += (organism.efficiency * 0.5) / getBuildCost(s.type);
+            if (s.buildProgress > 1) s.buildProgress = 1;
+          } else if (s.health < s.maxHealth) {
+            s.health = Math.min(s.maxHealth, s.health + organism.efficiency * 0.5);
+          }
+          organism.energy -= 0.3;
+          break;
+        }
+      }
+    }
+  }
+
   // 13. Predation — if hunting and contacting a weaker organism, consume it
+  // Society members with 2+ defenders get 30% predation resistance
   if (organism.state === "HUNTING") {
     for (const { org: other, dSq: d } of nearbyOrgs) {
       if (deadSet.has(other.id)) continue;
-      if (
-        d < PREDATION_CONTACT_RADIUS * PREDATION_CONTACT_RADIUS &&
-        other.energy < organism.energy
-      ) {
+      if (d >= PREDATION_CONTACT_RADIUS * PREDATION_CONTACT_RADIUS) continue;
+
+      // Predation resistance from society defenders
+      let requiredRatio = 1.0;
+      if (other.societyId !== null && societyCtx === null) {
+        // Target is in a society but attacker is not — check target's defenders
+        const targetSociety = world.societies.find((s) => s.id === other.societyId);
+        if (targetSociety) {
+          let defCount = 0;
+          for (const org2 of world.organisms) {
+            if (org2.societyId === other.societyId && org2.role === "defender") defCount++;
+          }
+          if (defCount >= 2) requiredRatio = 1.3;
+        }
+      }
+
+      if (other.energy < organism.energy / requiredRatio) {
         organism.energy += other.energy * organism.efficiency * 0.5;
         killedOrganismIds.push(other.id);
         deadSet.add(other.id);
@@ -388,10 +599,12 @@ function createOffspring(parent: Organism, world: WorldState, config: Simulation
       awareness: mutateTrait(parent.awareness, mr, ...TRAIT_RANGES.awareness),
       efficiency: mutateTrait(parent.efficiency, mr, ...TRAIT_RANGES.efficiency),
       riskTolerance: mutateTrait(parent.riskTolerance, mr, ...TRAIT_RANGES.riskTolerance),
+      socialAffinity: mutateTrait(parent.socialAffinity, mr, ...TRAIT_RANGES.socialAffinity),
     },
     parent.generation + 1,
   );
   org.energy = parent.energy;
   org.abilities = mutateAbilities(parent.abilities);
+  org.societyId = parent.societyId;
   return org;
 }

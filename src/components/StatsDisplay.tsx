@@ -17,6 +17,11 @@ interface Stats {
   hunters: number;
   fleeing: number;
   withAbilities: number;
+  societies: number;
+  structures: number;
+  avgSocietySize: number;
+  largestSociety: number;
+  avgSocialAffinity: number;
 }
 
 interface StatsDisplayProps {
@@ -43,6 +48,11 @@ function computeStats(world: WorldState): Stats {
       hunters: 0,
       fleeing: 0,
       withAbilities: 0,
+      societies: world.societies.length,
+      structures: world.structures.length,
+      avgSocietySize: 0,
+      largestSociety: 0,
+      avgSocialAffinity: 0,
     };
   }
 
@@ -54,6 +64,7 @@ function computeStats(world: WorldState): Stats {
   let totalAwareness = 0;
   let totalEfficiency = 0;
   let totalRiskTolerance = 0;
+  let totalSocialAffinity = 0;
   let maxGen = 0;
   let hunters = 0;
   let fleeing = 0;
@@ -68,11 +79,23 @@ function computeStats(world: WorldState): Stats {
     totalAwareness += org.awareness;
     totalEfficiency += org.efficiency;
     totalRiskTolerance += org.riskTolerance;
+    totalSocialAffinity += org.socialAffinity;
     if (org.generation > maxGen) maxGen = org.generation;
     if (org.state === "HUNTING") hunters++;
     if (org.state === "FLEEING") fleeing++;
     if (org.abilities.length > 0) withAbilities++;
   }
+
+  // Society stats
+  const societies = world.societies;
+  let largestSociety = 0;
+  let totalSocietyMembers = 0;
+  for (const s of societies) {
+    const size = s.memberIds.size;
+    totalSocietyMembers += size;
+    if (size > largestSociety) largestSociety = size;
+  }
+  const avgSocietySize = societies.length > 0 ? totalSocietyMembers / societies.length : 0;
 
   return {
     population: n,
@@ -90,6 +113,11 @@ function computeStats(world: WorldState): Stats {
     hunters,
     fleeing,
     withAbilities,
+    societies: societies.length,
+    structures: world.structures.length,
+    avgSocietySize,
+    largestSociety,
+    avgSocialAffinity: totalSocialAffinity / n,
   };
 }
 
@@ -110,6 +138,11 @@ export function StatsDisplay({ worldRef }: StatsDisplayProps) {
     hunters: 0,
     fleeing: 0,
     withAbilities: 0,
+    societies: 0,
+    structures: 0,
+    avgSocietySize: 0,
+    largestSociety: 0,
+    avgSocialAffinity: 0,
   });
 
   useEffect(() => {
@@ -174,6 +207,28 @@ export function StatsDisplay({ worldRef }: StatsDisplayProps) {
       <div className="stat-row">
         <span>Risk Tolerance</span>
         <span>{stats.avgRiskTolerance.toFixed(2)}</span>
+      </div>
+      <div className="stat-row">
+        <span>Social Affinity</span>
+        <span>{stats.avgSocialAffinity.toFixed(2)}</span>
+      </div>
+      <div className="stat-divider" />
+      <div className="stat-label">Societies</div>
+      <div className="stat-row">
+        <span>Societies</span>
+        <span>{stats.societies}</span>
+      </div>
+      <div className="stat-row">
+        <span>Structures</span>
+        <span>{stats.structures}</span>
+      </div>
+      <div className="stat-row">
+        <span>Avg Size</span>
+        <span>{stats.avgSocietySize.toFixed(1)}</span>
+      </div>
+      <div className="stat-row">
+        <span>Largest</span>
+        <span>{stats.largestSociety}</span>
       </div>
       <div className="stat-divider" />
       <div className="stat-label">Activity</div>

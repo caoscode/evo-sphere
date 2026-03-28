@@ -3,6 +3,12 @@ import { foodDensityAt } from "../simulation/terrain";
 import type { Camera } from "./camera";
 import { getVisibleBounds } from "./camera";
 import {
+  drawRoleIcon,
+  drawSocietyRing,
+  drawSocietyTerritories,
+  drawStructures,
+} from "./society-renderer";
+import {
   aggressionToSpikes,
   energyToRadius,
   metabolismToHue,
@@ -40,6 +46,12 @@ export function draw(
   // Subtle grid for spatial reference
   drawGrid(ctx, vb, camera.zoom);
 
+  // Society territories (behind everything)
+  drawSocietyTerritories(ctx, world, vb, camera.zoom);
+
+  // Structures
+  drawStructures(ctx, world, vb, camera.zoom);
+
   // Food — viewport cull
   for (const f of world.food) {
     if (f.x < vb.minX - 5 || f.x > vb.maxX + 5 || f.y < vb.minY - 5 || f.y > vb.maxY + 5) continue;
@@ -60,7 +72,7 @@ export function draw(
     )
       continue;
 
-    drawOrganism(ctx, org, camera.zoom, org.id === selectedId);
+    drawOrganism(ctx, org, camera.zoom, org.id === selectedId, world);
   }
 
   ctx.restore();
@@ -71,6 +83,7 @@ function drawOrganism(
   org: Organism,
   zoom: number,
   selected: boolean,
+  world: WorldState,
 ): void {
   const hue = metabolismToHue(org.metabolism);
   const radius = energyToRadius(org.energy);
@@ -165,6 +178,17 @@ function drawOrganism(
     ctx.beginPath();
     ctx.arc(org.x, org.y, radius + 10, 0, Math.PI * 2);
     ctx.stroke();
+  }
+
+  // Society ring and role icon
+  if (org.societyId !== null) {
+    const society = world.societies.find((s) => s.id === org.societyId);
+    if (society) {
+      drawSocietyRing(ctx, org, society.hue);
+      if (zoom > 0.3) {
+        drawRoleIcon(ctx, org);
+      }
+    }
   }
 
   // Ability visual indicators (only when zoomed in enough)

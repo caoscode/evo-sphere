@@ -1,4 +1,4 @@
-import type { BehaviorState } from "../simulation/types";
+import type { BehaviorState, SocietyRole } from "../simulation/types";
 import { TRAIT_RANGES } from "../simulation/config";
 
 /**
@@ -33,6 +33,31 @@ export function stateToOutlineColor(state: BehaviorState): string {
       return "rgba(255, 220, 60, 0.5)";
     case "FORAGING":
       return "rgba(60, 220, 100, 0.3)";
+    case "GATHERING":
+      return "rgba(80, 200, 80, 0.5)";
+    case "BUILDING":
+      return "rgba(220, 180, 50, 0.5)";
+    case "DEFENDING":
+      return "rgba(60, 100, 255, 0.7)";
+    case "COOPERATING":
+      return "rgba(150, 120, 255, 0.4)";
+  }
+}
+
+export function roleToColor(role: SocietyRole): string {
+  switch (role) {
+    case "farmer":
+      return "#55cc55";
+    case "builder":
+      return "#ddbb33";
+    case "defender":
+      return "#5588ff";
+    case "attacker":
+      return "#ff5555";
+    case "leader":
+      return "#ffffff";
+    case "none":
+      return "#888888";
   }
 }
 
