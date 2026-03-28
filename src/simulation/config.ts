@@ -6,7 +6,7 @@ export const DEFAULT_CONFIG: SimulationConfig = {
   initialOrganismCount: 30,
   initialFoodCount: 100,
   foodSpawnRate: 0.8,
-  foodEnergy: 30,
+  foodEnergy: 50,
   energyCostMultiplier: 1.0,
   mutationRate: 0.15,
   maxOrganisms: 500,
@@ -14,13 +14,20 @@ export const DEFAULT_CONFIG: SimulationConfig = {
 };
 
 // Energy cost coefficients
-export const SPEED_COST_FACTOR = 0.4;
-export const VISION_COST_FACTOR = 0.08;
+export const SPEED_COST_FACTOR = 0.15;
+export const VISION_COST_FACTOR = 0.01;
+export const AGGRESSION_COST_FACTOR = 0.05;
+export const AWARENESS_COST_FACTOR = 0.02;
 
 // Organism defaults
-export const INITIAL_ENERGY = 50;
+export const INITIAL_ENERGY = 100;
 export const CONTACT_RADIUS = 6;
+export const PREDATION_CONTACT_RADIUS = 8;
 export const MAX_TRAIL_LENGTH = 8;
+
+// Ability constants
+export const ABILITY_MUTATION_CHANCE = 0.03;
+export const MAX_ABILITIES = 2;
 
 // Trait ranges (min, max) for clamping after mutation
 export const TRAIT_RANGES = {
@@ -28,6 +35,10 @@ export const TRAIT_RANGES = {
   vision: [10, 200],
   metabolism: [0.05, 2],
   reproductionThreshold: [30, 200],
+  aggression: [0, 1],
+  awareness: [0, 1],
+  efficiency: [0.5, 2.0],
+  riskTolerance: [0, 1],
 } as const;
 
 // Initial trait values for first generation
@@ -36,4 +47,8 @@ export const INITIAL_TRAITS = {
   vision: 60,
   metabolism: 0.3,
   reproductionThreshold: 80,
+  aggression: 0.2,
+  awareness: 0.3,
+  efficiency: 1.0,
+  riskTolerance: 0.5,
 };

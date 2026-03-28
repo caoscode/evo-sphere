@@ -1,26 +1,33 @@
 export class SpatialGrid {
   private cellSize: number;
-  private cols: number;
-  private rows: number;
-  private cells: number[][];
+  private cells: Map<number, number[]>;
 
-  constructor(worldWidth: number, worldHeight: number, cellSize: number) {
+  constructor(cellSize: number) {
     this.cellSize = cellSize;
-    this.cols = Math.ceil(worldWidth / cellSize);
-    this.rows = Math.ceil(worldHeight / cellSize);
-    this.cells = Array.from({ length: this.cols * this.rows }, () => []);
+    this.cells = new Map();
   }
 
   clear(): void {
-    for (let i = 0; i < this.cells.length; i++) {
-      this.cells[i].length = 0;
-    }
+    this.cells.clear();
+  }
+
+  private key(col: number, row: number): number {
+    // Cantor pairing — works for negative coordinates via offset
+    const a = col >= 0 ? col * 2 : -col * 2 - 1;
+    const b = row >= 0 ? row * 2 : -row * 2 - 1;
+    return ((a + b) * (a + b + 1)) / 2 + b;
   }
 
   insert(x: number, y: number, index: number): void {
-    const col = Math.floor(x / this.cellSize) % this.cols;
-    const row = Math.floor(y / this.cellSize) % this.rows;
-    this.cells[row * this.cols + col].push(index);
+    const col = Math.floor(x / this.cellSize);
+    const row = Math.floor(y / this.cellSize);
+    const k = this.key(col, row);
+    const cell = this.cells.get(k);
+    if (cell) {
+      cell.push(index);
+    } else {
+      this.cells.set(k, [index]);
+    }
   }
 
   query(x: number, y: number, radius: number): number[] {
@@ -31,11 +38,12 @@ export class SpatialGrid {
 
     for (let dr = -cellRadius; dr <= cellRadius; dr++) {
       for (let dc = -cellRadius; dc <= cellRadius; dc++) {
-        const col = (((centerCol + dc) % this.cols) + this.cols) % this.cols;
-        const row = (((centerRow + dr) % this.rows) + this.rows) % this.rows;
-        const cell = this.cells[row * this.cols + col];
-        for (let i = 0; i < cell.length; i++) {
-          result.push(cell[i]);
+        const k = this.key(centerCol + dc, centerRow + dr);
+        const cell = this.cells.get(k);
+        if (cell) {
+          for (let i = 0; i < cell.length; i++) {
+            result.push(cell[i]);
+          }
         }
       }
     }
@@ -44,26 +52,12 @@ export class SpatialGrid {
   }
 }
 
-export function wrapDist(a: number, b: number, size: number): number {
-  const d = Math.abs(a - b);
-  return d > size / 2 ? size - d : d;
-}
-
-export function wrapDistSq(
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-  w: number,
-  h: number,
-): number {
-  const dx = wrapDist(x1, x2, w);
-  const dy = wrapDist(y1, y2, h);
+export function distSq(x1: number, y1: number, x2: number, y2: number): number {
+  const dx = x1 - x2;
+  const dy = y1 - y2;
   return dx * dx + dy * dy;
 }
 
-export function wrapDirection(from: number, to: number, size: number): number {
-  const d = to - from;
-  if (Math.abs(d) <= size / 2) return d;
-  return d > 0 ? d - size : d + size;
+export function direction(from: number, to: number): number {
+  return to - from;
 }

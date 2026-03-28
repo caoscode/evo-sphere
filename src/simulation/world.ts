@@ -3,6 +3,8 @@ import { createOrganism, updateOrganism } from "./organism";
 import { spawnFood } from "./food";
 import { SpatialGrid } from "./spatial-grid";
 
+const FOOD_SPAWN_MARGIN = 500;
+
 export function createSimulation(config: SimulationConfig): WorldState {
   const world: WorldState = {
     width: config.worldWidth,
@@ -13,26 +15,31 @@ export function createSimulation(config: SimulationConfig): WorldState {
     nextId: 0,
   };
 
-  // Spawn initial organisms with slight trait variation
+  // Spawn initial organisms centered around origin
   for (let i = 0; i < config.initialOrganismCount; i++) {
     const org = createOrganism(
       world.nextId++,
-      Math.random() * config.worldWidth,
-      Math.random() * config.worldHeight,
+      (Math.random() - 0.5) * config.worldWidth,
+      (Math.random() - 0.5) * config.worldHeight,
     );
     // Add initial variation so evolution has something to select from
     org.speed *= 0.7 + Math.random() * 0.6;
     org.vision *= 0.7 + Math.random() * 0.6;
     org.metabolism *= 0.7 + Math.random() * 0.6;
     org.reproductionThreshold *= 0.8 + Math.random() * 0.4;
+    org.aggression = Math.random();
+    org.awareness = Math.random();
+    org.efficiency = 0.5 + Math.random() * 1.5;
+    org.riskTolerance = Math.random();
     world.organisms.push(org);
   }
 
-  // Spawn initial food
+  // Spawn initial food around the population area
+  const bounds = computeBounds(world.organisms, FOOD_SPAWN_MARGIN);
   for (let i = 0; i < config.initialFoodCount; i++) {
     world.food.push({
-      x: Math.random() * config.worldWidth,
-      y: Math.random() * config.worldHeight,
+      x: bounds.minX + Math.random() * (bounds.maxX - bounds.minX),
+      y: bounds.minY + Math.random() * (bounds.maxY - bounds.minY),
       energy: config.foodEnergy,
     });
   }
@@ -40,24 +47,80 @@ export function createSimulation(config: SimulationConfig): WorldState {
   return world;
 }
 
+export function computeBounds(
+  organisms: Organism[],
+  margin: number,
+): { minX: number; minY: number; maxX: number; maxY: number } {
+  if (organisms.length === 0) {
+    return {
+      minX: -margin,
+      minY: -margin,
+      maxX: margin,
+      maxY: margin,
+    };
+  }
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const org of organisms) {
+    if (org.x < minX) minX = org.x;
+    if (org.y < minY) minY = org.y;
+    if (org.x > maxX) maxX = org.x;
+    if (org.y > maxY) maxY = org.y;
+  }
+  return {
+    minX: minX - margin,
+    minY: minY - margin,
+    maxX: maxX + margin,
+    maxY: maxY + margin,
+  };
+}
+
+export function computeCentroid(organisms: Organism[]): { x: number; y: number } {
+  if (organisms.length === 0) return { x: 0, y: 0 };
+  let sx = 0;
+  let sy = 0;
+  for (const org of organisms) {
+    sx += org.x;
+    sy += org.y;
+  }
+  return { x: sx / organisms.length, y: sy / organisms.length };
+}
+
 export function step(world: WorldState, config: SimulationConfig): void {
   // Build spatial grid for food
   const cellSize = 80;
-  const foodGrid = new SpatialGrid(world.width, world.height, cellSize);
+  const foodGrid = new SpatialGrid(cellSize);
   for (let i = 0; i < world.food.length; i++) {
     foodGrid.insert(world.food[i].x, world.food[i].y, i);
   }
 
+  // Build spatial grid for organisms (for future interactions)
+  const orgGrid = new SpatialGrid(cellSize);
+  for (let i = 0; i < world.organisms.length; i++) {
+    orgGrid.insert(world.organisms[i].x, world.organisms[i].y, i);
+  }
+
   // Update all organisms
   const deadIndices: number[] = [];
+  const deadSet = new Set<number>(); // track killed organism IDs
   const eatenFoodSet = new Set<number>();
   const newOrganisms: Organism[] = [];
 
   for (let i = 0; i < world.organisms.length; i++) {
-    const result = updateOrganism(world.organisms[i], world.food, foodGrid, world, config);
+    const org = world.organisms[i];
+    // Skip organisms killed by predation this tick
+    if (deadSet.has(org.id)) {
+      deadIndices.push(i);
+      continue;
+    }
+
+    const result = updateOrganism(org, world.food, foodGrid, world, config, orgGrid, deadSet);
 
     if (result.dead) {
       deadIndices.push(i);
+      deadSet.add(org.id);
     }
 
     for (const fi of result.eatenFoodIndices) {
@@ -67,11 +130,20 @@ export function step(world: WorldState, config: SimulationConfig): void {
     if (result.offspring) {
       newOrganisms.push(result.offspring);
     }
+
+    // Mark killed organisms for removal
+    for (const killedId of result.killedOrganismIds) {
+      for (let j = 0; j < world.organisms.length; j++) {
+        if (world.organisms[j].id === killedId && !deadIndices.includes(j)) {
+          deadIndices.push(j);
+        }
+      }
+    }
   }
 
-  // Remove dead organisms (swap-and-pop, reverse order)
-  deadIndices.sort((a, b) => b - a);
-  for (const i of deadIndices) {
+  // Remove dead organisms (swap-and-pop, reverse order, deduplicated)
+  const uniqueDeadIndices = [...new Set(deadIndices)].sort((a, b) => b - a);
+  for (const i of uniqueDeadIndices) {
     world.organisms[i] = world.organisms[world.organisms.length - 1];
     world.organisms.pop();
   }
@@ -90,10 +162,46 @@ export function step(world: WorldState, config: SimulationConfig): void {
     }
   }
 
-  // Spawn new food
+  // Carrying capacity pressure — local density drains energy
+  applyDensityPressure(world, orgGrid);
+
+  // Spawn new food around population
   spawnFood(world, config);
 
+  // Rescue spawn — prevent total extinction
+  if (world.organisms.length < 10 && world.organisms.length > 0) {
+    const centroid = computeCentroid(world.organisms);
+    for (let i = world.organisms.length; i < 15; i++) {
+      const org = createOrganism(
+        world.nextId++,
+        centroid.x + (Math.random() - 0.5) * 200,
+        centroid.y + (Math.random() - 0.5) * 200,
+      );
+      org.aggression = Math.random();
+      org.awareness = Math.random();
+      org.efficiency = 0.5 + Math.random() * 1.5;
+      org.riskTolerance = Math.random();
+      world.organisms.push(org);
+    }
+  }
+
   world.tick++;
+}
+
+const DENSITY_PRESSURE_RADIUS = 60;
+const DENSITY_PRESSURE_THRESHOLD = 8;
+const DENSITY_PRESSURE_COST = 0.3;
+
+function applyDensityPressure(world: WorldState, orgGrid: SpatialGrid): void {
+  for (const org of world.organisms) {
+    const nearby = orgGrid.query(org.x, org.y, DENSITY_PRESSURE_RADIUS);
+    // Subtract self
+    const neighborCount = nearby.length - 1;
+    if (neighborCount > DENSITY_PRESSURE_THRESHOLD) {
+      const excess = neighborCount - DENSITY_PRESSURE_THRESHOLD;
+      org.energy -= excess * DENSITY_PRESSURE_COST;
+    }
+  }
 }
 
 export function killPortion(world: WorldState, fraction: number): void {
