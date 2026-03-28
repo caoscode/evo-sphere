@@ -1,6 +1,7 @@
 import type { SimulationConfig, Society, Structure, StructureType, WorldState } from "./types";
 import { distSq } from "./spatial-grid";
 import { foodDensityAt } from "./terrain";
+import { findExpansionTarget } from "./territory";
 
 const BUILD_COSTS: Record<StructureType, number> = {
   home: 30,
@@ -41,12 +42,26 @@ function decideBuild(world: WorldState, society: Society): StructureType | null 
 }
 
 function findBuildSite(
-  _world: WorldState,
+  world: WorldState,
   society: Society,
   type: StructureType,
 ): { x: number; y: number } | null {
   if (type === "farm") {
-    // Find highest food density point within 100 units of centroid
+    // Try territory expansion target first
+    if (world.territoryGrid) {
+      const expansionTarget = findExpansionTarget(
+        world.territoryGrid,
+        society.id,
+        society.centroidX,
+        society.centroidY,
+      );
+      if (expansionTarget) {
+        const density = foodDensityAt(expansionTarget.x, expansionTarget.y);
+        if (density >= 0.3) return expansionTarget;
+      }
+    }
+
+    // Fallback: find highest food density point within 100 units of centroid
     let bestX = society.centroidX;
     let bestY = society.centroidY;
     let bestDensity = 0;
@@ -67,12 +82,38 @@ function findBuildSite(
     return { x: bestX, y: bestY };
   }
 
-  // Home and storage: place near centroid with small offset
-  const offset = type === "home" ? 0 : 15 + Math.random() * 20;
+  // Home and storage: place near centroid, bias toward contested borders if under pressure
+  let offsetBase = type === "home" ? 0 : 15 + Math.random() * 20;
+  if (
+    type === "storage" &&
+    society.borderCells > 0 &&
+    society.borderCells > society.territorySize * 0.3 &&
+    world.territoryGrid
+  ) {
+    // Under territorial pressure — place storage toward border to amplify influence
+    const borderTarget = findExpansionTarget(
+      world.territoryGrid,
+      society.id,
+      society.centroidX,
+      society.centroidY,
+    );
+    if (borderTarget) {
+      const dx = borderTarget.x - society.centroidX;
+      const dy = borderTarget.y - society.centroidY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > 1) {
+        return {
+          x: society.centroidX + (dx / dist) * Math.min(dist * 0.5, 40),
+          y: society.centroidY + (dy / dist) * Math.min(dist * 0.5, 40),
+        };
+      }
+    }
+  }
+
   const angle = Math.random() * Math.PI * 2;
   return {
-    x: society.centroidX + Math.cos(angle) * offset,
-    y: society.centroidY + Math.sin(angle) * offset,
+    x: society.centroidX + Math.cos(angle) * offsetBase,
+    y: society.centroidY + Math.sin(angle) * offsetBase,
   };
 }
 
@@ -134,17 +175,39 @@ function decayStructures(world: WorldState, config: SimulationConfig): void {
     s.health -= config.structureDecayRate * decayMult;
 
     // High-aggression non-members damage structures on contact
+    // Attacker-role organisms in enemy territory deal extra damage
     for (const org of world.organisms) {
-      if (org.aggression > 0.6 && org.societyId !== s.societyId) {
-        if (distSq(org.x, org.y, s.x, s.y) < 64) {
-          // contact radius 8
-          s.health -= 1;
-        }
+      if (org.societyId === s.societyId) continue;
+      const d = distSq(org.x, org.y, s.x, s.y);
+      if (org.role === "attacker" && org.societyId !== null && d < 900) {
+        // 30u radius, 2 damage
+        s.health -= 2;
+      } else if (org.aggression > 0.6 && d < 64) {
+        // contact radius 8, 1 damage
+        s.health -= 1;
       }
     }
 
     // Remove destroyed structures
     if (s.health <= 0) {
+      // Transfer stored energy to attacker's society
+      if (s.storedEnergy > 0) {
+        for (const org of world.organisms) {
+          if (
+            org.role === "attacker" &&
+            org.societyId !== null &&
+            org.societyId !== s.societyId &&
+            distSq(org.x, org.y, s.x, s.y) < 900
+          ) {
+            const attackerSociety = world.societies.find((soc) => soc.id === org.societyId);
+            if (attackerSociety) {
+              attackerSociety.sharedPool += s.storedEnergy * 0.2;
+            }
+            break;
+          }
+        }
+      }
+
       // Remove from society's set
       const society = world.societies.find((soc) => soc.id === s.societyId);
       if (society) society.structureIds.delete(s.id);

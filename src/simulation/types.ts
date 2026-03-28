@@ -6,7 +6,9 @@ export type BehaviorState =
   | "GATHERING"
   | "BUILDING"
   | "DEFENDING"
-  | "COOPERATING";
+  | "COOPERATING"
+  | "PATROLLING"
+  | "INVADING";
 
 export type AbilityType = "burstSpeed" | "energyDrain" | "camouflage" | "areaSense" | "reproSpike";
 
@@ -36,6 +38,11 @@ export interface Society {
   totalEnergy: number;
   structureIds: Set<number>;
   sharedPool: number;
+  territorySize: number;
+  territoryValue: number;
+  borderCells: number;
+  power: number;
+  peakTerritorySize: number;
 }
 
 export interface Ability {
@@ -85,6 +92,17 @@ export interface Food {
   energy: number;
 }
 
+export interface TerritoryGrid {
+  originX: number;
+  originY: number;
+  cols: number;
+  rows: number;
+  cellSize: number;
+  influence: Map<number, Float32Array>;
+  owner: Int16Array;
+  contestLevel: Float32Array;
+}
+
 export interface WorldState {
   width: number;
   height: number;
@@ -96,6 +114,7 @@ export interface WorldState {
   structures: Structure[];
   nextSocietyId: number;
   nextStructureId: number;
+  territoryGrid: TerritoryGrid | null;
 }
 
 export interface SimulationConfig {

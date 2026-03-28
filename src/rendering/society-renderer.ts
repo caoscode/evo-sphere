@@ -1,4 +1,4 @@
-import type { Organism, Society, WorldState } from "../simulation/types";
+import type { Organism, WorldState } from "../simulation/types";
 import { energyToRadius } from "./visual-encoding";
 import { roleToColor } from "./visual-encoding";
 
@@ -6,12 +6,14 @@ type ViewBounds = { minX: number; minY: number; maxX: number; maxY: number };
 
 // --- Society territories ---
 
-export function drawSocietyTerritories(
+export function drawSocietyConnections(
   ctx: CanvasRenderingContext2D,
   world: WorldState,
   vb: ViewBounds,
   zoom: number,
 ): void {
+  if (zoom < 0.3) return;
+
   for (const society of world.societies) {
     const members = world.organisms.filter((o) => o.societyId === society.id);
     if (members.length === 0) continue;
@@ -25,61 +27,23 @@ export function drawSocietyTerritories(
     )
       continue;
 
-    if (zoom < 0.15) {
-      // Low zoom: simple circle at centroid
-      const spread = computeSpread(members, society);
-      ctx.fillStyle = `hsla(${society.hue}, 60%, 50%, 0.08)`;
-      ctx.beginPath();
-      ctx.arc(society.centroidX, society.centroidY, spread, 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      // Medium/high zoom: convex hull
-      const hull = convexHull(members);
-      if (hull.length < 3) continue;
-
-      ctx.fillStyle = `hsla(${society.hue}, 60%, 50%, 0.06)`;
-      ctx.strokeStyle = `hsla(${society.hue}, 60%, 50%, 0.15)`;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(hull[0].x, hull[0].y);
-      for (let i = 1; i < hull.length; i++) {
-        ctx.lineTo(hull[i].x, hull[i].y);
-      }
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-
-      // Draw thin lines between nearby society members at high zoom
-      if (zoom > 0.3) {
-        ctx.strokeStyle = `hsla(${society.hue}, 50%, 60%, 0.06)`;
-        ctx.lineWidth = 0.5;
-        for (let i = 0; i < members.length; i++) {
-          for (let j = i + 1; j < members.length; j++) {
-            const dx = members[i].x - members[j].x;
-            const dy = members[i].y - members[j].y;
-            if (dx * dx + dy * dy < 3600) {
-              // within 60 units
-              ctx.beginPath();
-              ctx.moveTo(members[i].x, members[i].y);
-              ctx.lineTo(members[j].x, members[j].y);
-              ctx.stroke();
-            }
-          }
+    // Draw thin lines between nearby society members
+    ctx.strokeStyle = `hsla(${society.hue}, 50%, 60%, 0.06)`;
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i < members.length; i++) {
+      for (let j = i + 1; j < members.length; j++) {
+        const dx = members[i].x - members[j].x;
+        const dy = members[i].y - members[j].y;
+        if (dx * dx + dy * dy < 3600) {
+          // within 60 units
+          ctx.beginPath();
+          ctx.moveTo(members[i].x, members[i].y);
+          ctx.lineTo(members[j].x, members[j].y);
+          ctx.stroke();
         }
       }
     }
   }
-}
-
-function computeSpread(members: Organism[], society: Society): number {
-  let maxDistSq = 0;
-  for (const m of members) {
-    const dx = m.x - society.centroidX;
-    const dy = m.y - society.centroidY;
-    const dSq = dx * dx + dy * dy;
-    if (dSq > maxDistSq) maxDistSq = dSq;
-  }
-  return Math.sqrt(maxDistSq) + 20;
 }
 
 // --- Structures ---
@@ -321,62 +285,4 @@ function drawStar(
   }
   ctx.closePath();
   ctx.fill();
-}
-
-// --- Convex hull (Graham scan) ---
-
-function convexHull(organisms: Organism[]): Array<{ x: number; y: number }> {
-  if (organisms.length < 3) return organisms.map((o) => ({ x: o.x, y: o.y }));
-
-  const points = organisms.map((o) => ({ x: o.x, y: o.y }));
-
-  // Find lowest point (then leftmost)
-  let lowest = 0;
-  for (let i = 1; i < points.length; i++) {
-    if (
-      points[i].y > points[lowest].y ||
-      (points[i].y === points[lowest].y && points[i].x < points[lowest].x)
-    ) {
-      lowest = i;
-    }
-  }
-  [points[0], points[lowest]] = [points[lowest], points[0]];
-  const pivot = points[0];
-
-  // Sort by polar angle
-  points.sort((a, b) => {
-    if (a === pivot) return -1;
-    if (b === pivot) return 1;
-    const cross = (a.x - pivot.x) * (b.y - pivot.y) - (a.y - pivot.y) * (b.x - pivot.x);
-    if (cross !== 0) return -cross;
-    // Collinear: closer first
-    const dA = (a.x - pivot.x) ** 2 + (a.y - pivot.y) ** 2;
-    const dB = (b.x - pivot.x) ** 2 + (b.y - pivot.y) ** 2;
-    return dA - dB;
-  });
-
-  const stack: Array<{ x: number; y: number }> = [points[0], points[1]];
-  for (let i = 2; i < points.length; i++) {
-    while (stack.length > 1) {
-      const top = stack[stack.length - 1];
-      const second = stack[stack.length - 2];
-      const cross =
-        (top.x - second.x) * (points[i].y - second.y) -
-        (top.y - second.y) * (points[i].x - second.x);
-      if (cross <= 0) stack.pop();
-      else break;
-    }
-    stack.push(points[i]);
-  }
-
-  // Expand hull slightly for visual padding
-  const cx = stack.reduce((s, p) => s + p.x, 0) / stack.length;
-  const cy = stack.reduce((s, p) => s + p.y, 0) / stack.length;
-  return stack.map((p) => {
-    const dx = p.x - cx;
-    const dy = p.y - cy;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < 1) return p;
-    return { x: p.x + (dx / dist) * 15, y: p.y + (dy / dist) * 15 };
-  });
 }

@@ -64,3 +64,16 @@ export const SOCIETY_JOIN_TICKS = 10;
 export const SOCIETY_FORM_TICKS = 15;
 export const SOCIETY_LEAVE_DISTANCE = 200;
 export const MAX_SOCIETY_SIZE = 30;
+
+// Territory constants
+export const TERRITORY_CELL_SIZE = 40;
+export const TERRITORY_UPDATE_INTERVAL = 10;
+export const INFLUENCE_MEMBER_BASE = 1.0;
+export const INFLUENCE_STRUCTURE_HOME = 3.0;
+export const INFLUENCE_STRUCTURE_STORAGE = 2.0;
+export const INFLUENCE_STRUCTURE_FARM = 2.5;
+export const INFLUENCE_DECAY_RATE = 0.15;
+export const INFLUENCE_CLAIM_THRESHOLD = 0.3;
+export const INFLUENCE_CONTEST_RATIO = 0.6;
+export const TERRITORY_ENERGY_PENALTY = 0.1;
+export const BORDER_SKIRMISH_RANGE = 60;

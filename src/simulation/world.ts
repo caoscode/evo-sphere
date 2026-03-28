@@ -4,6 +4,8 @@ import { spawnFood } from "./food";
 import { SpatialGrid } from "./spatial-grid";
 import { updateSocieties } from "./society";
 import { updateStructures } from "./infrastructure";
+import { createTerritoryGrid, updateTerritoryGrid, processBorderConflicts } from "./territory";
+import { TERRITORY_UPDATE_INTERVAL } from "./config";
 
 const FOOD_SPAWN_MARGIN = 500;
 
@@ -19,6 +21,7 @@ export function createSimulation(config: SimulationConfig): WorldState {
     structures: [],
     nextSocietyId: 0,
     nextStructureId: 0,
+    territoryGrid: null,
   };
 
   // Spawn initial organisms centered around origin
@@ -180,6 +183,19 @@ export function step(world: WorldState, config: SimulationConfig): void {
 
   // Update societies (formation, roles, cooperation)
   updateSocieties(world, config, orgGrid);
+
+  // Update territory grid
+  if (world.societies.length > 0) {
+    if (!world.territoryGrid) {
+      world.territoryGrid = createTerritoryGrid(world);
+    }
+    if (world.tick % TERRITORY_UPDATE_INTERVAL === 0) {
+      updateTerritoryGrid(world.territoryGrid, world);
+    }
+    processBorderConflicts(world, orgGrid);
+  } else if (world.territoryGrid) {
+    world.territoryGrid = null;
+  }
 
   // Update structures (building, decay, farm food)
   updateStructures(world, config);

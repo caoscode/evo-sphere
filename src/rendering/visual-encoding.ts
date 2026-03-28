@@ -41,6 +41,10 @@ export function stateToOutlineColor(state: BehaviorState): string {
       return "rgba(60, 100, 255, 0.7)";
     case "COOPERATING":
       return "rgba(150, 120, 255, 0.4)";
+    case "PATROLLING":
+      return "rgba(100, 150, 255, 0.5)";
+    case "INVADING":
+      return "rgba(255, 100, 50, 0.7)";
   }
 }
 

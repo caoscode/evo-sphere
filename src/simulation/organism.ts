@@ -17,7 +17,9 @@ import {
   SPEED_COST_FACTOR,
   TRAIT_RANGES,
   VISION_COST_FACTOR,
+  TERRITORY_ENERGY_PENALTY,
 } from "./config";
+import { getCellOwner, findBorderDirection, findInvasionTarget } from "./territory";
 import { type SpatialGrid, direction, distSq } from "./spatial-grid";
 import {
   applyEnergyDrain,
@@ -89,6 +91,10 @@ interface SocietyContext {
   centroidY: number;
   buildSite: { x: number; y: number } | null;
   defenderCount: number;
+  hasBorders: boolean;
+  borderPatrolTarget: { x: number; y: number } | null;
+  invasionTarget: { x: number; y: number } | null;
+  inEnemyTerritory: boolean;
 }
 
 function findNearestThreat(
@@ -130,6 +136,12 @@ function evaluateState(
   if (organism.societyId !== null && societyCtx) {
     if (organism.role === "defender" && hasThreat) {
       return "DEFENDING";
+    }
+    if (organism.role === "defender" && !hasThreat && societyCtx.borderPatrolTarget) {
+      return "PATROLLING";
+    }
+    if (organism.role === "attacker" && societyCtx.invasionTarget) {
+      return "INVADING";
     }
     if (organism.role === "builder" && societyCtx.buildSite) {
       return "BUILDING";
@@ -276,6 +288,33 @@ function executeBehavior(
         steerToward(organism, midX, midY, 1.1);
       } else if (societyCtx) {
         steerToward(organism, societyCtx.centroidX, societyCtx.centroidY, 0.5);
+      } else {
+        wander(organism);
+      }
+      break;
+    }
+    case "PATROLLING": {
+      if (societyCtx?.borderPatrolTarget) {
+        const target = societyCtx.borderPatrolTarget;
+        const d = distSq(organism.x, organism.y, target.x, target.y);
+        if (d < 400) {
+          // Near border — wander along it
+          wander(organism);
+          organism.vx *= 0.9;
+          organism.vy *= 0.9;
+        } else {
+          steerToward(organism, target.x, target.y, 0.9);
+        }
+      } else {
+        wander(organism);
+      }
+      break;
+    }
+    case "INVADING": {
+      if (societyCtx?.invasionTarget) {
+        steerToward(organism, societyCtx.invasionTarget.x, societyCtx.invasionTarget.y, 1.1);
+      } else if (nearestFood) {
+        steerToward(organism, nearestFood.x, nearestFood.y, 1.0);
       } else {
         wander(organism);
       }
@@ -436,11 +475,35 @@ export function updateOrganism(
       for (const org2 of world.organisms) {
         if (org2.societyId === society.id && org2.role === "defender") defenderCount++;
       }
+
+      // Territory context
+      let hasBorders = society.borderCells > 0;
+      let borderPatrolTarget: { x: number; y: number } | null = null;
+      let invasionTgt: { x: number; y: number } | null = null;
+      let inEnemyTerritory = false;
+
+      const grid = world.territoryGrid;
+      if (grid) {
+        const cellOwner = getCellOwner(grid, organism.x, organism.y);
+        inEnemyTerritory = cellOwner !== -1 && cellOwner !== society.id;
+
+        if (organism.role === "defender" && hasBorders) {
+          borderPatrolTarget = findBorderDirection(grid, society.id, organism.x, organism.y);
+        }
+        if (organism.role === "attacker" && hasBorders) {
+          invasionTgt = findInvasionTarget(grid, society.id, organism.x, organism.y);
+        }
+      }
+
       societyCtx = {
         centroidX: society.centroidX,
         centroidY: society.centroidY,
         buildSite,
         defenderCount,
+        hasBorders,
+        borderPatrolTarget,
+        invasionTarget: invasionTgt,
+        inEnemyTerritory,
       };
     }
   }
@@ -483,6 +546,11 @@ export function updateOrganism(
     config.energyCostMultiplier *
     homeCostMult;
   organism.energy -= cost;
+
+  // 10b. Territory energy penalty — being in enemy territory drains energy
+  if (societyCtx?.inEnemyTerritory) {
+    organism.energy -= TERRITORY_ENERGY_PENALTY;
+  }
 
   // 11. Energy drain ability
   applyEnergyDrain(organism, nearbyOrgs);
@@ -545,6 +613,14 @@ export function updateOrganism(
           }
           if (defCount >= 2) requiredRatio = 1.3;
         }
+      }
+      // Territory defense bonus: defending in own territory is easier
+      if (
+        other.societyId !== null &&
+        world.territoryGrid &&
+        getCellOwner(world.territoryGrid, other.x, other.y) === other.societyId
+      ) {
+        requiredRatio *= 1.2;
       }
 
       if (other.energy < organism.energy / requiredRatio) {

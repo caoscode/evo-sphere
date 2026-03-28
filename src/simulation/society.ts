@@ -106,6 +106,11 @@ function tryFormSocieties(world: WorldState, config: SimulationConfig, orgGrid: 
       totalEnergy: 0,
       structureIds: new Set(),
       sharedPool: 0,
+      territorySize: 0,
+      territoryValue: 0,
+      borderCells: 0,
+      power: 0,
+      peakTerritorySize: 0,
     };
 
     for (const member of cluster) {
@@ -183,8 +188,11 @@ function processLeaving(world: WorldState): void {
     for (const org of world.organisms) {
       if (org.societyId !== society.id) continue;
 
-      // Leave if energy critically low
-      if (org.energy < avgEnergy * 0.2) {
+      // Leave if energy critically low (threshold rises when society is in decline)
+      const inDecline =
+        society.peakTerritorySize > 0 && society.territorySize < society.peakTerritorySize * 0.3;
+      const leaveEnergyThreshold = inDecline ? 0.3 : 0.2;
+      if (org.energy < avgEnergy * leaveEnergyThreshold) {
         removeMember(org, society);
         continue;
       }
@@ -355,6 +363,11 @@ function applySocietyCooperation(world: WorldState): void {
     society.centroidY = cy / members.length;
 
     const avgEnergy = totalEnergy / members.length;
+
+    // Territory decline: drain shared pool when territory shrinks significantly
+    if (society.peakTerritorySize > 0 && society.territorySize < society.peakTerritorySize * 0.3) {
+      society.sharedPool *= 0.99;
+    }
 
     // Energy pooling
     for (const org of members) {

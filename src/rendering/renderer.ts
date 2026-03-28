@@ -5,9 +5,15 @@ import { getVisibleBounds } from "./camera";
 import {
   drawRoleIcon,
   drawSocietyRing,
-  drawSocietyTerritories,
+  drawSocietyConnections,
   drawStructures,
 } from "./society-renderer";
+import {
+  type TerritoryBuffer,
+  createTerritoryBuffer,
+  updateTerritoryBuffer,
+  drawTerritoryOverlay,
+} from "./territory-renderer";
 import {
   aggressionToSpikes,
   energyToRadius,
@@ -15,6 +21,8 @@ import {
   speedToTrailAlpha,
   stateToOutlineColor,
 } from "./visual-encoding";
+
+let territoryBuffer: TerritoryBuffer | null = null;
 
 const GRID_SPACING = 100;
 const TERRAIN_CELL = 50; // world units per terrain heatmap cell
@@ -43,11 +51,20 @@ export function draw(
   // Terrain heatmap (faint green tint showing food density)
   drawTerrainHeatmap(ctx, vb);
 
+  // Territory overlay (influence-based)
+  if (world.territoryGrid && world.societies.length > 0) {
+    if (!territoryBuffer) {
+      territoryBuffer = createTerritoryBuffer();
+    }
+    updateTerritoryBuffer(territoryBuffer, world.territoryGrid, world.societies, world.tick);
+    drawTerritoryOverlay(ctx, territoryBuffer, world.territoryGrid, vb, camera.zoom);
+  }
+
   // Subtle grid for spatial reference
   drawGrid(ctx, vb, camera.zoom);
 
-  // Society territories (behind everything)
-  drawSocietyTerritories(ctx, world, vb, camera.zoom);
+  // Society member connections
+  drawSocietyConnections(ctx, world, vb, camera.zoom);
 
   // Structures
   drawStructures(ctx, world, vb, camera.zoom);
