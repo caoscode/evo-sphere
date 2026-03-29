@@ -201,6 +201,12 @@ function tryFormSocieties(world: WorldState, config: SimulationConfig, orgGrid: 
     updateSocietyCentroid(society, cluster);
     world.societies.push(society);
     world.totalSocietiesEver++;
+    world.events.push({
+      type: "society_formed",
+      tick: world.tick,
+      detail: `Society #${society.id} formed with ${cluster.length} members`,
+      data: { societyId: society.id, members: cluster.length, hue: society.hue },
+    });
   }
 }
 
@@ -391,6 +397,12 @@ function dissolveSociety(world: WorldState, society: Society, index: number): vo
       }
     }
   }
+  world.events.push({
+    type: "society_dissolved",
+    tick: world.tick,
+    detail: `Society #${society.id} dissolved (${society.memberIds.size} members)`,
+    data: { societyId: society.id, members: society.memberIds.size },
+  });
   world.societies[index] = world.societies[world.societies.length - 1];
   world.societies.pop();
 }
@@ -506,6 +518,12 @@ function fragmentSociety(
   // Add new fragments
   world.societies.push(fragA, fragB);
   world.totalSocietiesEver += 2;
+  world.events.push({
+    type: "society_fragmented",
+    tick: world.tick,
+    detail: `Society fragmented into #${fragA.id} (${fragA.memberIds.size}) and #${fragB.id} (${fragB.memberIds.size})`,
+    data: { fragAId: fragA.id, fragBId: fragB.id },
+  });
 }
 
 function mutatePersonality(p: SocietyPersonality): SocietyPersonality {

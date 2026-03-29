@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { SimulationConfig, WorldState } from "../simulation/types";
+import type { DebugOverlayConfig } from "../observability/debug-overlay";
 import type { Camera } from "../rendering/camera";
 import { draw } from "../rendering/renderer";
 import { step } from "../simulation/world";
@@ -16,6 +17,8 @@ interface SimulationCanvasProps {
   speedRef: React.RefObject<number>;
   cameraRef: React.RefObject<Camera>;
   selectedIdRef: React.MutableRefObject<number | null>;
+  debugOverlayRef: React.RefObject<DebugOverlayConfig>;
+  stepOnceRef: React.MutableRefObject<boolean>;
   onTogglePause: () => void;
   onReset: () => void;
   onInjectFood: () => void;
@@ -28,6 +31,8 @@ export function SimulationCanvas({
   speedRef,
   cameraRef,
   selectedIdRef,
+  debugOverlayRef,
+  stepOnceRef,
   onTogglePause,
   onReset,
   onInjectFood,
@@ -154,6 +159,11 @@ export function SimulationCanvas({
         case "Escape":
           selectedIdRef.current = null;
           break;
+        case "Period":
+          if (pausedRef.current) {
+            stepOnceRef.current = true;
+          }
+          break;
       }
     }
 
@@ -186,6 +196,11 @@ export function SimulationCanvas({
         }
       } else {
         accumulator = 0;
+        // Frame stepping when paused
+        if (stepOnceRef.current) {
+          step(worldRef.current!, configRef.current!);
+          stepOnceRef.current = false;
+        }
       }
 
       draw(
@@ -195,6 +210,7 @@ export function SimulationCanvas({
         window.innerHeight,
         cameraRef.current!,
         selectedIdRef.current,
+        debugOverlayRef.current!,
       );
       rafId = requestAnimationFrame(frame);
     }
@@ -217,6 +233,8 @@ export function SimulationCanvas({
     speedRef,
     cameraRef,
     selectedIdRef,
+    debugOverlayRef,
+    stepOnceRef,
     onTogglePause,
     onReset,
     onInjectFood,

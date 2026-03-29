@@ -101,6 +101,13 @@ export function checkFoodSurge(world: WorldState, config: SimulationConfig): voi
     });
   }
 
+  world.events.push({
+    type: "food_surge",
+    tick: world.tick,
+    detail: `Food surge: ${amount} food spawned at (${Math.round(cx)}, ${Math.round(cy)})`,
+    data: { amount, x: Math.round(cx), y: Math.round(cy) },
+  });
+
   // Reset cooldown
   world.foodSurgeCooldown = randomSurgeInterval();
 }

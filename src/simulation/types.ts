@@ -161,6 +161,7 @@ export interface WorldState {
   territoryGrid: TerritoryGrid | null;
   foodSurgeCooldown: number;
   totalSocietiesEver: number;
+  events: import("../observability/events").SimEvent[];
 }
 
 export interface SimulationConfig {

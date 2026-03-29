@@ -24,6 +24,7 @@ export function createSimulation(config: SimulationConfig): WorldState {
     territoryGrid: null,
     foodSurgeCooldown: initFoodSurgeCooldown(),
     totalSocietiesEver: 0,
+    events: [],
   };
 
   // Spawn initial organisms centered around origin
@@ -154,10 +155,19 @@ export function step(world: WorldState, config: SimulationConfig): void {
   }
 
   // Remove dead organisms (swap-and-pop, reverse order, deduplicated)
+  const prevPopulation = world.organisms.length;
   const uniqueDeadIndices = [...new Set(deadIndices)].sort((a, b) => b - a);
   for (const i of uniqueDeadIndices) {
     world.organisms[i] = world.organisms[world.organisms.length - 1];
     world.organisms.pop();
+  }
+  if (uniqueDeadIndices.length > prevPopulation * 0.2 && prevPopulation > 20) {
+    world.events.push({
+      type: "population_crash",
+      tick: world.tick,
+      detail: `Population crash: ${uniqueDeadIndices.length} died (${Math.round((uniqueDeadIndices.length / prevPopulation) * 100)}% loss)`,
+      data: { deaths: uniqueDeadIndices.length, prevPopulation },
+    });
   }
 
   // Remove eaten food (swap-and-pop, reverse order)
@@ -210,6 +220,7 @@ export function step(world: WorldState, config: SimulationConfig): void {
 
   // Rescue spawn — prevent total extinction
   if (world.organisms.length < 10 && world.organisms.length > 0) {
+    const rescueCount = 15 - world.organisms.length;
     const centroid = computeCentroid(world.organisms);
     for (let i = world.organisms.length; i < 15; i++) {
       const org = createOrganism(
@@ -224,6 +235,12 @@ export function step(world: WorldState, config: SimulationConfig): void {
       org.socialAffinity = Math.random();
       world.organisms.push(org);
     }
+    world.events.push({
+      type: "rescue_spawn",
+      tick: world.tick,
+      detail: `Rescue spawn: ${rescueCount} organisms added to prevent extinction`,
+      data: { count: rescueCount },
+    });
   }
 
   world.tick++;

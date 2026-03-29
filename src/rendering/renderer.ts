@@ -1,4 +1,5 @@
 import type { Organism, WorldState } from "../simulation/types";
+import type { DebugOverlayConfig } from "../observability/debug-overlay";
 import { foodDensityAt } from "../simulation/terrain";
 import type { Camera } from "./camera";
 import { getVisibleBounds } from "./camera";
@@ -35,6 +36,7 @@ export function draw(
   canvasHeight: number,
   camera: Camera,
   selectedId: number | null = null,
+  debugOverlay?: DebugOverlayConfig,
 ): void {
   const vb = getVisibleBounds(camera, canvasWidth, canvasHeight);
 
@@ -50,7 +52,7 @@ export function draw(
   ctx.scale(camera.zoom, camera.zoom);
 
   // Terrain heatmap (faint green tint showing food density)
-  drawTerrainHeatmap(ctx, vb);
+  drawTerrainHeatmap(ctx, vb, debugOverlay?.showFoodDensity);
 
   // Territory overlay (influence-based)
   if (world.territoryGrid && world.societies.length > 0) {
@@ -83,6 +85,8 @@ export function draw(
   }
 
   // Organisms — viewport cull with vision margin
+  const ef = debugOverlay?.entityFilter;
+  const hlSociety = debugOverlay?.highlightSocietyId ?? null;
   for (const org of world.organisms) {
     const margin = Math.max(org.vision, 20);
     if (
@@ -93,7 +97,24 @@ export function draw(
     )
       continue;
 
-    drawOrganism(ctx, org, camera.zoom, org.id === selectedId, world);
+    // Entity filter
+    if (ef) {
+      if (ef.hiddenStates.size > 0 && ef.hiddenStates.has(org.state)) continue;
+      if (ef.minGeneration > 0 && org.generation < ef.minGeneration) continue;
+      if (ef.showOnlySocietyMembers && org.societyId === null) continue;
+      if (ef.showOnlyIndependents && org.societyId !== null) continue;
+    }
+
+    // Society highlight — dim non-members
+    if (hlSociety !== null && org.societyId !== hlSociety) {
+      ctx.globalAlpha = 0.15;
+    }
+
+    drawOrganism(ctx, org, camera.zoom, org.id === selectedId, world, debugOverlay);
+
+    if (hlSociety !== null && org.societyId !== hlSociety) {
+      ctx.globalAlpha = 1;
+    }
   }
 
   ctx.restore();
@@ -105,6 +126,7 @@ function drawOrganism(
   zoom: number,
   selected: boolean,
   world: WorldState,
+  debugOverlay?: DebugOverlayConfig,
 ): void {
   const hue = metabolismToHue(org.metabolism);
   const radius = energyToRadius(org.energy);
@@ -124,8 +146,8 @@ function drawOrganism(
     ctx.stroke();
   }
 
-  // Vision ring (skip when zoomed out far)
-  if (zoom > 0.15) {
+  // Vision ring (skip when zoomed out far, unless debug override)
+  if (zoom > 0.15 || debugOverlay?.showVisionRings) {
     const hasAreaSense = org.abilities.some((a) => a.type === "areaSense");
     if (hasAreaSense) {
       // Dashed vision ring for areaSense
@@ -216,6 +238,30 @@ function drawOrganism(
   if (zoom > 0.2) {
     drawAbilityIndicators(ctx, org, radius);
   }
+
+  // Debug: movement vectors
+  if (debugOverlay?.showMovementVectors) {
+    const vLen = Math.sqrt(org.vx * org.vx + org.vy * org.vy);
+    if (vLen > 0.1) {
+      ctx.strokeStyle = "rgba(0, 220, 255, 0.6)";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(org.x, org.y);
+      ctx.lineTo(org.x + org.vx * 10, org.y + org.vy * 10);
+      ctx.stroke();
+      // Arrowhead
+      const nx = org.vx / vLen;
+      const ny = org.vy / vLen;
+      const tipX = org.x + org.vx * 10;
+      const tipY = org.y + org.vy * 10;
+      ctx.beginPath();
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(tipX - nx * 4 + ny * 2, tipY - ny * 4 - nx * 2);
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(tipX - nx * 4 - ny * 2, tipY - ny * 4 + nx * 2);
+      ctx.stroke();
+    }
+  }
 }
 
 function drawAbilityIndicators(ctx: CanvasRenderingContext2D, org: Organism, radius: number): void {
@@ -290,15 +336,17 @@ function drawSpikyBody(
 function drawTerrainHeatmap(
   ctx: CanvasRenderingContext2D,
   vb: { minX: number; minY: number; maxX: number; maxY: number },
+  enhanced?: boolean,
 ): void {
   const startX = Math.floor(vb.minX / TERRAIN_CELL) * TERRAIN_CELL;
   const startY = Math.floor(vb.minY / TERRAIN_CELL) * TERRAIN_CELL;
+  const alphaMult = enhanced ? 0.25 : 0.06;
 
   for (let x = startX; x <= vb.maxX; x += TERRAIN_CELL) {
     for (let y = startY; y <= vb.maxY; y += TERRAIN_CELL) {
       const density = foodDensityAt(x + TERRAIN_CELL / 2, y + TERRAIN_CELL / 2);
       if (density > 0.1) {
-        const alpha = density * 0.06;
+        const alpha = density * alphaMult;
         ctx.fillStyle = `rgba(40, 180, 60, ${alpha})`;
         ctx.fillRect(x, y, TERRAIN_CELL, TERRAIN_CELL);
       }

@@ -1,9 +1,11 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import { SimulationCanvas } from "./components/SimulationCanvas";
 import { ControlPanel } from "./components/ControlPanel";
+import { ObservabilityLayer } from "./components/observability/ObservabilityLayer";
 import { DEFAULT_CONFIG } from "./simulation/config";
 import { createSimulation, computeCentroid } from "./simulation/world";
 import { injectFoodBurst } from "./simulation/food";
+import { createDefaultDebugOverlay } from "./observability/debug-overlay";
 import type { SimulationConfig, WorldState } from "./simulation/types";
 import type { Camera } from "./rendering/camera";
 import { createCamera } from "./rendering/camera";
@@ -16,6 +18,18 @@ function App() {
   const speedRef = useRef(1);
   const cameraRef = useRef<Camera>(createCamera());
   const selectedIdRef = useRef<number | null>(null);
+  const debugOverlayRef = useRef(createDefaultDebugOverlay());
+  const stepOnceRef = useRef(false);
+  const [openPanels, setOpenPanels] = useState<Set<string>>(new Set());
+
+  const handleTogglePanel = useCallback((id: string) => {
+    setOpenPanels((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   const handleTogglePause = useCallback(() => {
     pausedRef.current = !pausedRef.current;
@@ -43,6 +57,8 @@ function App() {
         speedRef={speedRef}
         cameraRef={cameraRef}
         selectedIdRef={selectedIdRef}
+        debugOverlayRef={debugOverlayRef}
+        stepOnceRef={stepOnceRef}
         onTogglePause={handleTogglePause}
         onReset={handleReset}
         onInjectFood={handleInjectFood}
@@ -54,6 +70,16 @@ function App() {
         speedRef={speedRef}
         cameraRef={cameraRef}
         selectedIdRef={selectedIdRef}
+        openPanels={openPanels}
+        onTogglePanel={handleTogglePanel}
+      />
+      <ObservabilityLayer
+        worldRef={worldRef}
+        debugOverlayRef={debugOverlayRef}
+        stepOnceRef={stepOnceRef}
+        pausedRef={pausedRef}
+        openPanels={openPanels}
+        onTogglePanel={handleTogglePanel}
       />
     </>
   );

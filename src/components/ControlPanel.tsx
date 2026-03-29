@@ -15,7 +15,16 @@ interface ControlPanelProps {
   speedRef: React.MutableRefObject<number>;
   cameraRef: React.MutableRefObject<Camera>;
   selectedIdRef: React.MutableRefObject<number | null>;
+  openPanels: Set<string>;
+  onTogglePanel: (id: string) => void;
 }
+
+const PANEL_BUTTONS = [
+  { id: "graphs", label: "⇟", title: "Graphs" },
+  { id: "events", label: "≡", title: "Event Log" },
+  { id: "analysis", label: "☉", title: "Analysis" },
+  { id: "debug", label: "⚙", title: "Debug" },
+] as const;
 
 export function ControlPanel({
   worldRef,
@@ -24,6 +33,8 @@ export function ControlPanel({
   speedRef,
   cameraRef,
   selectedIdRef,
+  openPanels,
+  onTogglePanel,
 }: ControlPanelProps) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<TabId>("ctrl");
@@ -232,6 +243,20 @@ export function ControlPanel({
                 <button className="action-btn danger" onClick={handleKill}>
                   Kill 50%
                 </button>
+              </div>
+              <div className="stat-divider" />
+              <div className="stat-label">Views</div>
+              <div className="action-row">
+                {PANEL_BUTTONS.map((p) => (
+                  <button
+                    key={p.id}
+                    className={`action-btn${openPanels.has(p.id) ? " active" : ""}`}
+                    title={p.title}
+                    onClick={() => onTogglePanel(p.id)}
+                  >
+                    {p.title}
+                  </button>
+                ))}
               </div>
             </div>
           )}
