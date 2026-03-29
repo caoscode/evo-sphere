@@ -77,3 +77,30 @@ export const INFLUENCE_CLAIM_THRESHOLD = 0.3;
 export const INFLUENCE_CONTEST_RATIO = 0.6;
 export const TERRITORY_ENERGY_PENALTY = 0.1;
 export const BORDER_SKIRMISH_RANGE = 60;
+
+// Food surge constants
+export const FOOD_SURGE_MIN_INTERVAL = 500;
+export const FOOD_SURGE_MAX_INTERVAL = 1500;
+export const FOOD_SURGE_AMOUNT_MIN = 30;
+export const FOOD_SURGE_AMOUNT_MAX = 80;
+export const FOOD_SURGE_ENERGY_MULT = 1.5;
+export const FOOD_SURGE_RADIUS = 150;
+
+// Farm enhancement constants
+export const FARM_MATURITY_TICKS = 200;
+export const FARM_FARMER_BONUS = 0.1;
+export const FARM_MAX_RATE = 1.2;
+
+// Overextension constants
+export const OVEREXTENSION_THRESHOLD = 0.1;
+
+// Collapse constants
+export const COLLAPSE_STABILITY_THRESHOLD = 0.3;
+export const COLLAPSE_TIMER_LIMIT = 50;
+export const COLLAPSE_MIN_AGE = 200;
+export const INDEPENDENCE_COOLDOWN_TICKS = 50;
+
+// War zone constants
+export const WAR_ZONE_CONTEST_THRESHOLD = 0.8;
+export const WAR_ZONE_FOOD_REJECT_CHANCE = 0.5;
+export const WAR_ZONE_REFUGEE_CHANCE = 0.01;

@@ -1,6 +1,6 @@
 import type { Organism, SimulationConfig, WorldState } from "./types";
 import { createOrganism, updateOrganism } from "./organism";
-import { spawnFood } from "./food";
+import { spawnFood, checkFoodSurge, initFoodSurgeCooldown } from "./food";
 import { SpatialGrid } from "./spatial-grid";
 import { updateSocieties } from "./society";
 import { updateStructures } from "./infrastructure";
@@ -22,6 +22,8 @@ export function createSimulation(config: SimulationConfig): WorldState {
     nextSocietyId: 0,
     nextStructureId: 0,
     territoryGrid: null,
+    foodSurgeCooldown: initFoodSurgeCooldown(),
+    totalSocietiesEver: 0,
   };
 
   // Spawn initial organisms centered around origin
@@ -202,6 +204,9 @@ export function step(world: WorldState, config: SimulationConfig): void {
 
   // Spawn new food around population
   spawnFood(world, config);
+
+  // Check for food surge events
+  checkFoodSurge(world, config);
 
   // Rescue spawn — prevent total extinction
   if (world.organisms.length < 10 && world.organisms.length > 0) {

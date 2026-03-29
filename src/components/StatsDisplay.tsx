@@ -22,6 +22,10 @@ interface Stats {
   avgSocietySize: number;
   largestSociety: number;
   avgSocialAffinity: number;
+  totalSocietiesEver: number;
+  risingSocieties: number;
+  fallingSocieties: number;
+  activeRivalries: number;
 }
 
 interface StatsDisplayProps {
@@ -53,6 +57,10 @@ function computeStats(world: WorldState): Stats {
       avgSocietySize: 0,
       largestSociety: 0,
       avgSocialAffinity: 0,
+      totalSocietiesEver: world.totalSocietiesEver,
+      risingSocieties: 0,
+      fallingSocieties: 0,
+      activeRivalries: 0,
     };
   }
 
@@ -97,6 +105,19 @@ function computeStats(world: WorldState): Stats {
   }
   const avgSocietySize = societies.length > 0 ? totalSocietyMembers / societies.length : 0;
 
+  let risingSocieties = 0;
+  let fallingSocieties = 0;
+  let activeRivalries = 0;
+  for (const s of societies) {
+    if (s.history.isRising) risingSocieties++;
+    if (s.history.isFalling) fallingSocieties++;
+    for (const hostility of s.rivalries.values()) {
+      if (hostility > 0.3) activeRivalries++;
+    }
+  }
+  // Each rivalry is counted from both sides, so halve
+  activeRivalries = Math.floor(activeRivalries / 2);
+
   return {
     population: n,
     food: world.food.length,
@@ -118,6 +139,10 @@ function computeStats(world: WorldState): Stats {
     avgSocietySize,
     largestSociety,
     avgSocialAffinity: totalSocialAffinity / n,
+    totalSocietiesEver: world.totalSocietiesEver,
+    risingSocieties,
+    fallingSocieties,
+    activeRivalries,
   };
 }
 
@@ -143,6 +168,10 @@ export function StatsDisplay({ worldRef }: StatsDisplayProps) {
     avgSocietySize: 0,
     largestSociety: 0,
     avgSocialAffinity: 0,
+    totalSocietiesEver: 0,
+    risingSocieties: 0,
+    fallingSocieties: 0,
+    activeRivalries: 0,
   });
 
   useEffect(() => {
@@ -229,6 +258,20 @@ export function StatsDisplay({ worldRef }: StatsDisplayProps) {
       <div className="stat-row">
         <span>Largest</span>
         <span>{stats.largestSociety}</span>
+      </div>
+      <div className="stat-row">
+        <span>Total Ever</span>
+        <span>{stats.totalSocietiesEver}</span>
+      </div>
+      <div className="stat-row">
+        <span>Rising / Falling</span>
+        <span>
+          {stats.risingSocieties} / {stats.fallingSocieties}
+        </span>
+      </div>
+      <div className="stat-row">
+        <span>Rivalries</span>
+        <span>{stats.activeRivalries}</span>
       </div>
       <div className="stat-divider" />
       <div className="stat-label">Activity</div>

@@ -2,17 +2,18 @@ import type { SimulationConfig, Society, Structure, StructureType, WorldState } 
 import { distSq } from "./spatial-grid";
 import { foodDensityAt } from "./terrain";
 import { findExpansionTarget } from "./territory";
+import { FARM_MATURITY_TICKS, FARM_FARMER_BONUS, FARM_MAX_RATE } from "./config";
 
 const BUILD_COSTS: Record<StructureType, number> = {
   home: 30,
   storage: 40,
-  farm: 50,
+  farm: 60,
 };
 
 const STRUCTURE_LIMITS: Record<StructureType, number> = {
   home: 1,
   storage: 3,
-  farm: 2,
+  farm: 3,
 };
 
 function countStructures(world: WorldState, societyId: number, type: StructureType): number {
@@ -225,10 +226,27 @@ function spawnFarmFood(world: WorldState, config: SimulationConfig): void {
     if (s.type !== "farm" || s.buildProgress < 1) continue;
     if (world.food.length >= config.maxFood) break;
 
-    // Spawn 0.5 food/tick on average
-    if (Math.random() < 0.5) {
+    // Farm maturity: ramps from 50% to 100% over FARM_MATURITY_TICKS
+    const maturity = Math.min(1, (world.tick - s.createdTick) / FARM_MATURITY_TICKS);
+    const baseRate = 0.5 * (0.5 + 0.5 * maturity);
+
+    // Farmer bonus: +FARM_FARMER_BONUS per farmer within 40 units
+    let farmerBonus = 0;
+    if (s.societyId !== -1) {
+      for (const org of world.organisms) {
+        if (org.societyId === s.societyId && org.role === "farmer") {
+          if (distSq(org.x, org.y, s.x, s.y) < 1600) {
+            farmerBonus += FARM_FARMER_BONUS;
+          }
+        }
+      }
+    }
+
+    const rate = Math.min(FARM_MAX_RATE, baseRate + farmerBonus);
+    if (Math.random() < rate) {
       const angle = Math.random() * Math.PI * 2;
-      const r = Math.random() * 30;
+      const maxRadius = 30 + 20 * maturity; // wider radius as farm matures
+      const r = Math.random() * maxRadius;
       world.food.push({
         x: s.x + Math.cos(angle) * r,
         y: s.y + Math.sin(angle) * r,

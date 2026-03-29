@@ -123,6 +123,59 @@ export function updateTerritoryBuffer(
 
   ctx.putImageData(imageData, 0, 0);
 
+  // Draw emblem pattern overlays on territory
+  const societyMap = new Map<number, Society>();
+  for (const s of societies) societyMap.set(s.id, s);
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const idx = r * cols + c;
+      const owner = grid.owner[idx];
+      if (owner === -1) continue;
+      const soc = societyMap.get(owner);
+      if (!soc) continue;
+      const pattern = soc.emblem.pattern;
+      if (pattern === "solid") continue;
+
+      const rgb2 = hueToRgb(soc.emblem.secondaryHue);
+      const px = c * scale;
+      const py = r * scale;
+      const sz = scale;
+
+      ctx.strokeStyle = `rgba(${rgb2.r}, ${rgb2.g}, ${rgb2.b}, 0.04)`;
+      ctx.fillStyle = `rgba(${rgb2.r}, ${rgb2.g}, ${rgb2.b}, 0.04)`;
+      ctx.lineWidth = 0.5;
+
+      switch (pattern) {
+        case "striped":
+          // Diagonal line on every other cell
+          if ((c + r) % 3 === 0) {
+            ctx.beginPath();
+            ctx.moveTo(px, py + sz);
+            ctx.lineTo(px + sz, py);
+            ctx.stroke();
+          }
+          break;
+        case "dotted":
+          // Small dot on every 3rd cell
+          if ((c + r) % 3 === 0) {
+            ctx.beginPath();
+            ctx.arc(px + sz / 2, py + sz / 2, 0.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          break;
+        case "rings":
+          // Concentric circle hint on every 4th cell
+          if ((c + r) % 4 === 0) {
+            ctx.beginPath();
+            ctx.arc(px + sz / 2, py + sz / 2, sz * 0.4, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+          break;
+      }
+    }
+  }
+
   // Draw border lines on top
   ctx.lineWidth = 1;
   for (let r = 0; r < rows; r++) {

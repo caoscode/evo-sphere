@@ -81,6 +81,7 @@ export function createOrganism(
     socialAffinity: traits?.socialAffinity ?? INITIAL_TRAITS.socialAffinity,
     proximityTimer: 0,
     buildContribution: 0,
+    independenceCooldown: 0,
   };
 }
 

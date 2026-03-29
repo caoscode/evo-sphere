@@ -7,6 +7,7 @@ import {
   drawSocietyRing,
   drawSocietyConnections,
   drawStructures,
+  drawSocietyBanners,
 } from "./society-renderer";
 import {
   type TerritoryBuffer,
@@ -68,6 +69,9 @@ export function draw(
 
   // Structures
   drawStructures(ctx, world, vb, camera.zoom);
+
+  // Society banners at centroids
+  drawSocietyBanners(ctx, world, vb, camera.zoom);
 
   // Food — viewport cull
   for (const f of world.food) {
@@ -201,7 +205,7 @@ function drawOrganism(
   if (org.societyId !== null) {
     const society = world.societies.find((s) => s.id === org.societyId);
     if (society) {
-      drawSocietyRing(ctx, org, society.hue);
+      drawSocietyRing(ctx, org, society);
       if (zoom > 0.3) {
         drawRoleIcon(ctx, org);
       }

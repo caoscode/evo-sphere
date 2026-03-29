@@ -1,10 +1,10 @@
-import type { Organism, WorldState } from "../simulation/types";
+import type { Organism, Society, SocietyEmblem, WorldState } from "../simulation/types";
 import { energyToRadius } from "./visual-encoding";
 import { roleToColor } from "./visual-encoding";
 
 type ViewBounds = { minX: number; minY: number; maxX: number; maxY: number };
 
-// --- Society territories ---
+// --- Society connections ---
 
 export function drawSocietyConnections(
   ctx: CanvasRenderingContext2D,
@@ -18,7 +18,6 @@ export function drawSocietyConnections(
     const members = world.organisms.filter((o) => o.societyId === society.id);
     if (members.length === 0) continue;
 
-    // Skip if centroid is far off screen
     if (
       society.centroidX < vb.minX - 300 ||
       society.centroidX > vb.maxX + 300 ||
@@ -27,7 +26,6 @@ export function drawSocietyConnections(
     )
       continue;
 
-    // Draw thin lines between nearby society members
     ctx.strokeStyle = `hsla(${society.hue}, 50%, 60%, 0.06)`;
     ctx.lineWidth = 0.5;
     for (let i = 0; i < members.length; i++) {
@@ -35,7 +33,6 @@ export function drawSocietyConnections(
         const dx = members[i].x - members[j].x;
         const dy = members[i].y - members[j].y;
         if (dx * dx + dy * dy < 3600) {
-          // within 60 units
           ctx.beginPath();
           ctx.moveTo(members[i].x, members[i].y);
           ctx.lineTo(members[j].x, members[j].y);
@@ -127,7 +124,6 @@ function drawHexagon(
     ctx.stroke();
   }
 
-  // Center dot
   ctx.fillStyle = `hsla(${hue}, 70%, 70%, 0.8)`;
   ctx.beginPath();
   ctx.arc(x, y, 2, 0, Math.PI * 2);
@@ -150,7 +146,6 @@ function drawStorageBox(
   } else {
     ctx.fillStyle = "rgba(220, 180, 50, 0.2)";
     ctx.fillRect(x - half, y - half, size, size);
-    // Fill level indicator (fills from bottom)
     if (fillLevel > 0) {
       const fillH = size * fillLevel;
       ctx.fillStyle = "rgba(220, 180, 50, 0.5)";
@@ -185,7 +180,6 @@ function drawFarm(
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // Radius indicator at higher zoom
     if (zoom > 0.2) {
       ctx.strokeStyle = "rgba(80, 180, 60, 0.08)";
       ctx.lineWidth = 0.5;
@@ -194,7 +188,6 @@ function drawFarm(
       ctx.stroke();
     }
 
-    // Small seed dots
     ctx.fillStyle = "rgba(80, 180, 60, 0.5)";
     for (let i = 0; i < 4; i++) {
       const angle = (Math.PI / 2) * i + Math.PI / 4;
@@ -207,13 +200,43 @@ function drawFarm(
 
 // --- Society ring and role icon on organisms ---
 
-export function drawSocietyRing(ctx: CanvasRenderingContext2D, org: Organism, hue: number): void {
+export function drawSocietyRing(
+  ctx: CanvasRenderingContext2D,
+  org: Organism,
+  society: Society,
+): void {
   const radius = energyToRadius(org.energy);
+  const hue = society.hue;
+  const emblem = society.emblem;
+
   ctx.strokeStyle = `hsla(${hue}, 60%, 60%, 0.3)`;
   ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(org.x, org.y, radius + 4, 0, Math.PI * 2);
-  ctx.stroke();
+
+  // Border style based on emblem
+  switch (emblem.borderStyle) {
+    case "dashed":
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.arc(org.x, org.y, radius + 4, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      break;
+    case "double":
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(org.x, org.y, radius + 3, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(org.x, org.y, radius + 6, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+    case "solid":
+    default:
+      ctx.beginPath();
+      ctx.arc(org.x, org.y, radius + 4, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+  }
 }
 
 export function drawRoleIcon(ctx: CanvasRenderingContext2D, org: Organism): void {
@@ -228,12 +251,10 @@ export function drawRoleIcon(ctx: CanvasRenderingContext2D, org: Organism): void
 
   switch (org.role) {
     case "farmer": {
-      // Green square
       ctx.fillRect(ix - 2, iy - 2, 4, 4);
       break;
     }
     case "builder": {
-      // Yellow triangle
       ctx.beginPath();
       ctx.moveTo(ix, iy - 3);
       ctx.lineTo(ix - 3, iy + 2);
@@ -243,14 +264,12 @@ export function drawRoleIcon(ctx: CanvasRenderingContext2D, org: Organism): void
       break;
     }
     case "defender": {
-      // Blue circle
       ctx.beginPath();
       ctx.arc(ix, iy, 2.5, 0, Math.PI * 2);
       ctx.fill();
       break;
     }
     case "attacker": {
-      // Red diamond
       ctx.beginPath();
       ctx.moveTo(ix, iy - 3);
       ctx.lineTo(ix + 3, iy);
@@ -261,7 +280,6 @@ export function drawRoleIcon(ctx: CanvasRenderingContext2D, org: Organism): void
       break;
     }
     case "leader": {
-      // White star (larger)
       drawStar(ctx, ix, iy, 4, 2, 5);
       break;
     }
@@ -285,4 +303,149 @@ function drawStar(
   }
   ctx.closePath();
   ctx.fill();
+}
+
+// --- Emblem shape drawing ---
+
+function drawEmblemShape(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  emblem: SocietyEmblem,
+  hue: number,
+): void {
+  ctx.fillStyle = `hsla(${hue}, 60%, 55%, 0.8)`;
+  ctx.strokeStyle = `hsla(${emblem.secondaryHue}, 50%, 60%, 0.6)`;
+  ctx.lineWidth = 1;
+
+  switch (emblem.shape) {
+    case "circle":
+      ctx.beginPath();
+      ctx.arc(cx, cy, size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      break;
+    case "triangle":
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - size);
+      ctx.lineTo(cx - size, cy + size * 0.7);
+      ctx.lineTo(cx + size, cy + size * 0.7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      break;
+    case "diamond":
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - size);
+      ctx.lineTo(cx + size, cy);
+      ctx.lineTo(cx, cy + size);
+      ctx.lineTo(cx - size, cy);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      break;
+    case "cross": {
+      const arm = size * 0.35;
+      ctx.beginPath();
+      ctx.moveTo(cx - arm, cy - size);
+      ctx.lineTo(cx + arm, cy - size);
+      ctx.lineTo(cx + arm, cy - arm);
+      ctx.lineTo(cx + size, cy - arm);
+      ctx.lineTo(cx + size, cy + arm);
+      ctx.lineTo(cx + arm, cy + arm);
+      ctx.lineTo(cx + arm, cy + size);
+      ctx.lineTo(cx - arm, cy + size);
+      ctx.lineTo(cx - arm, cy + arm);
+      ctx.lineTo(cx - size, cy + arm);
+      ctx.lineTo(cx - size, cy - arm);
+      ctx.lineTo(cx - arm, cy - arm);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      break;
+    }
+    case "star":
+      drawStar(ctx, cx, cy, size, size * 0.45, 5);
+      ctx.fill();
+      ctx.stroke();
+      break;
+    case "hexagon":
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const angle = (Math.PI / 3) * i - Math.PI / 6;
+        const px = cx + Math.cos(angle) * size;
+        const py = cy + Math.sin(angle) * size;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      break;
+  }
+}
+
+// --- Strategy icons ---
+
+const STRATEGY_LABELS: Record<string, string> = {
+  attack: "\u2694", // crossed swords
+  defend: "\u26E8", // shield
+  expand: "\u2192", // arrow
+  consolidate: "\u25C9", // circle
+};
+
+// --- Society Banners ---
+
+export function drawSocietyBanners(
+  ctx: CanvasRenderingContext2D,
+  world: WorldState,
+  vb: ViewBounds,
+  zoom: number,
+): void {
+  for (const society of world.societies) {
+    const sx = society.centroidX;
+    const sy = society.centroidY;
+
+    // Skip if off screen
+    if (sx < vb.minX - 50 || sx > vb.maxX + 50 || sy < vb.minY - 50 || sy > vb.maxY + 50) continue;
+
+    if (zoom < 0.08) continue;
+
+    if (zoom < 0.15) {
+      // Very zoomed out: just a colored dot with emblem shape
+      drawEmblemShape(ctx, sx, sy, 8 / zoom, society.emblem, society.hue);
+    } else {
+      // Banner: emblem + member count
+      const bannerSize = Math.min(12, 6 / zoom);
+
+      // Background pill
+      ctx.fillStyle = `hsla(${society.hue}, 40%, 15%, 0.7)`;
+      const pillW = bannerSize * 4;
+      const pillH = bannerSize * 2;
+      ctx.beginPath();
+      ctx.roundRect(sx - pillW / 2, sy - 30 - pillH / 2, pillW, pillH, pillH / 3);
+      ctx.fill();
+
+      // Emblem shape inside banner
+      drawEmblemShape(ctx, sx - pillW / 4, sy - 30, bannerSize * 0.6, society.emblem, society.hue);
+
+      // Member count
+      if (zoom > 0.2) {
+        ctx.fillStyle = `hsla(${society.hue}, 60%, 80%, 0.9)`;
+        ctx.font = `${Math.max(6, bannerSize * 0.8)}px monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(`${society.memberIds.size}`, sx + pillW / 6, sy - 30);
+      }
+
+      // Strategy indicator
+      if (zoom > 0.3) {
+        ctx.fillStyle = `hsla(${society.hue}, 50%, 70%, 0.7)`;
+        ctx.font = `${Math.max(5, bannerSize * 0.6)}px monospace`;
+        ctx.textAlign = "center";
+        ctx.fillText(STRATEGY_LABELS[society.strategy] ?? "", sx + pillW / 3, sy - 30);
+      }
+    }
+  }
 }

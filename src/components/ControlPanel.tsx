@@ -211,6 +211,15 @@ function SelectedOrganism({
     societyId: number | null;
     societySize: number;
     sharedPool: number;
+    strategy: string | null;
+    stability: number | null;
+    personality: {
+      aggression: number;
+      defensiveness: number;
+      expansiveness: number;
+      economicFocus: number;
+    } | null;
+    topRival: { id: number; hostility: number } | null;
   } | null>(null);
 
   useEffect(() => {
@@ -249,6 +258,17 @@ function SelectedOrganism({
         societyId: org.societyId,
         societySize: society?.memberIds.size ?? 0,
         sharedPool: society?.sharedPool ?? 0,
+        strategy: society?.strategy ?? null,
+        stability: society?.stabilityScore ?? null,
+        personality: society?.personality ?? null,
+        topRival: (() => {
+          if (!society) return null;
+          let best: { id: number; hostility: number } | null = null;
+          for (const [sid, h] of society.rivalries) {
+            if (!best || h > best.hostility) best = { id: sid, hostility: h };
+          }
+          return best && best.hostility > 0.1 ? best : null;
+        })(),
       });
     }, 250);
     return () => clearInterval(interval);
@@ -324,6 +344,49 @@ function SelectedOrganism({
             <span>Shared Pool</span>
             <span>{info.sharedPool.toFixed(1)}</span>
           </div>
+          {info.strategy && (
+            <div className="stat-row">
+              <span>Strategy</span>
+              <span>{info.strategy}</span>
+            </div>
+          )}
+          {info.stability !== null && (
+            <div className="stat-row">
+              <span>Stability</span>
+              <span>{info.stability.toFixed(2)}</span>
+            </div>
+          )}
+          {info.personality && (
+            <>
+              <div className="stat-label" style={{ marginTop: 4 }}>
+                Personality
+              </div>
+              <div className="stat-row">
+                <span>Aggression</span>
+                <span>{info.personality.aggression.toFixed(2)}</span>
+              </div>
+              <div className="stat-row">
+                <span>Defense</span>
+                <span>{info.personality.defensiveness.toFixed(2)}</span>
+              </div>
+              <div className="stat-row">
+                <span>Expansion</span>
+                <span>{info.personality.expansiveness.toFixed(2)}</span>
+              </div>
+              <div className="stat-row">
+                <span>Economy</span>
+                <span>{info.personality.economicFocus.toFixed(2)}</span>
+              </div>
+            </>
+          )}
+          {info.topRival && (
+            <div className="stat-row">
+              <span>Top Rival</span>
+              <span>
+                #{info.topRival.id} ({info.topRival.hostility.toFixed(2)})
+              </span>
+            </div>
+          )}
         </>
       )}
     </div>

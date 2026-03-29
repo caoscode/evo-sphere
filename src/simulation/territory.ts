@@ -12,6 +12,7 @@ import {
   INFLUENCE_CLAIM_THRESHOLD,
   INFLUENCE_CONTEST_RATIO,
   BORDER_SKIRMISH_RANGE,
+  OVEREXTENSION_THRESHOLD,
 } from "./config";
 
 const MEMBER_STAMP_RADIUS = 5; // cells
@@ -102,13 +103,21 @@ export function updateTerritoryGrid(grid: TerritoryGrid, world: WorldState): voi
     activeSocietyIds.add(id);
   }
 
-  // Stamp influence from members
+  // Stamp influence from members (reduced by overextension)
   for (const society of world.societies) {
     activeSocietyIds.add(society.id);
     const arr = getOrCreateInfluence(grid, society.id);
+    const influenceMult = 1 - society.overextensionPenalty * 0.5;
     for (const org of world.organisms) {
       if (org.societyId === society.id) {
-        stampInfluence(arr, grid, org.x, org.y, INFLUENCE_MEMBER_BASE, MEMBER_STAMP_RADIUS);
+        stampInfluence(
+          arr,
+          grid,
+          org.x,
+          org.y,
+          INFLUENCE_MEMBER_BASE * influenceMult,
+          MEMBER_STAMP_RADIUS,
+        );
       }
     }
   }
@@ -217,7 +226,7 @@ export function updateTerritoryGrid(grid: TerritoryGrid, world: WorldState): voi
     }
   }
 
-  // Update power and peak territory
+  // Update power, peak territory, and overextension
   for (const society of world.societies) {
     society.power =
       society.memberIds.size * 2 +
@@ -227,6 +236,14 @@ export function updateTerritoryGrid(grid: TerritoryGrid, world: WorldState): voi
     if (society.territorySize > society.peakTerritorySize) {
       society.peakTerritorySize = society.territorySize;
     }
+
+    // Overextension: too much territory relative to members
+    const membersPerCell =
+      society.territorySize > 0 ? society.memberIds.size / society.territorySize : 1;
+    society.overextensionPenalty =
+      membersPerCell < OVEREXTENSION_THRESHOLD
+        ? Math.min(1, (OVEREXTENSION_THRESHOLD - membersPerCell) * 10)
+        : 0;
   }
 }
 

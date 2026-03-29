@@ -14,6 +14,38 @@ export type AbilityType = "burstSpeed" | "energyDrain" | "camouflage" | "areaSen
 
 export type SocietyRole = "farmer" | "builder" | "defender" | "attacker" | "leader" | "none";
 export type StructureType = "home" | "storage" | "farm";
+export type SocietyStrategy = "expand" | "defend" | "attack" | "consolidate";
+
+export interface SocietyPersonality {
+  aggression: number;
+  defensiveness: number;
+  expansiveness: number;
+  economicFocus: number;
+}
+
+export interface LeaderDirective {
+  type: "rally" | "target" | "scatter" | "idle";
+  targetX?: number;
+  targetY?: number;
+  targetSocietyId?: number;
+  issuedTick: number;
+}
+
+export interface SocietyEmblem {
+  shape: "circle" | "triangle" | "diamond" | "cross" | "star" | "hexagon";
+  pattern: "solid" | "striped" | "dotted" | "rings";
+  secondaryHue: number;
+  borderStyle: "solid" | "dashed" | "double";
+}
+
+export interface SocietyHistory {
+  foundingMembers: number;
+  peakPower: number;
+  peakTick: number;
+  territorySamples: number[];
+  isRising: boolean;
+  isFalling: boolean;
+}
 
 export interface Structure {
   id: number;
@@ -43,6 +75,17 @@ export interface Society {
   borderCells: number;
   power: number;
   peakTerritorySize: number;
+  personality: SocietyPersonality;
+  strategy: SocietyStrategy;
+  leaderDirective: LeaderDirective;
+  leaderId: number | null;
+  stabilityScore: number;
+  overextensionPenalty: number;
+  peakMemberCount: number;
+  collapseTimer: number;
+  emblem: SocietyEmblem;
+  history: SocietyHistory;
+  rivalries: Map<number, number>;
 }
 
 export interface Ability {
@@ -84,6 +127,7 @@ export interface Organism {
   socialAffinity: number;
   proximityTimer: number;
   buildContribution: number;
+  independenceCooldown: number;
 }
 
 export interface Food {
@@ -115,6 +159,8 @@ export interface WorldState {
   nextSocietyId: number;
   nextStructureId: number;
   territoryGrid: TerritoryGrid | null;
+  foodSurgeCooldown: number;
+  totalSocietiesEver: number;
 }
 
 export interface SimulationConfig {
