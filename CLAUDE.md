@@ -70,7 +70,7 @@ React refs (not state) hold all simulation data to avoid re-renders during the g
 
 ## Remember
 
-Update README.md and CLAUDE.md with relevant information when the project changes.
+Update the @docs/SIMULATION.md, @README.md and @CLAUDE.md with relevant information when the project changes.
 
 <!--VITE PLUS START-->
 
