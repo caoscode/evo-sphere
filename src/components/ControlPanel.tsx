@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { SimulationConfig, WorldState } from "../simulation/types";
 import type { Camera } from "../rendering/camera";
 import { injectFoodBurst } from "../simulation/food";
 import { killPortion, computeCentroid } from "../simulation/world";
 import { createSimulation } from "../simulation/world";
 import { StatsDisplay } from "./StatsDisplay";
+
+type TabId = "ctrl" | "stats" | "org";
 
 interface ControlPanelProps {
   worldRef: React.MutableRefObject<WorldState>;
@@ -23,41 +25,66 @@ export function ControlPanel({
   cameraRef,
   selectedIdRef,
 }: ControlPanelProps) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<TabId>("ctrl");
   const [paused, setPaused] = useState(false);
+  const [hasSelected, setHasSelected] = useState(false);
   const [foodRate, setFoodRate] = useState(configRef.current.foodSpawnRate);
   const [energyCost, setEnergyCost] = useState(configRef.current.energyCostMultiplier);
   const [simSpeed, setSimSpeed] = useState(1);
   const [mutationRate, setMutationRate] = useState(configRef.current.mutationRate);
 
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+
+  // Track organism selection state
+  useEffect(() => {
+    const id = setInterval(() => {
+      setHasSelected(selectedIdRef.current !== null);
+    }, 300);
+    return () => clearInterval(id);
+  }, [selectedIdRef]);
+
+  // Leave Org tab when selection clears
+  useEffect(() => {
+    if (!hasSelected) {
+      setTab((prev) => (prev === "org" ? "ctrl" : prev));
+    }
+  }, [hasSelected]);
+
+  // Jump to Org tab when panel opens with an active selection
+  useEffect(() => {
+    if (open && hasSelected) setTab("org");
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleFoodRate = useCallback(
-    (value: number) => {
-      setFoodRate(value);
-      configRef.current.foodSpawnRate = value;
+    (v: number) => {
+      setFoodRate(v);
+      configRef.current.foodSpawnRate = v;
     },
     [configRef],
   );
 
   const handleEnergyCost = useCallback(
-    (value: number) => {
-      setEnergyCost(value);
-      configRef.current.energyCostMultiplier = value;
+    (v: number) => {
+      setEnergyCost(v);
+      configRef.current.energyCostMultiplier = v;
     },
     [configRef],
   );
 
   const handleSimSpeed = useCallback(
-    (value: number) => {
-      setSimSpeed(value);
-      speedRef.current = value;
+    (v: number) => {
+      setSimSpeed(v);
+      speedRef.current = v;
     },
     [speedRef],
   );
 
   const handleMutationRate = useCallback(
-    (value: number) => {
-      setMutationRate(value);
-      configRef.current.mutationRate = value;
+    (v: number) => {
+      setMutationRate(v);
+      configRef.current.mutationRate = v;
     },
     [configRef],
   );
@@ -91,97 +118,138 @@ export function ControlPanel({
     killPortion(worldRef.current, 0.5);
   }, [worldRef]);
 
-  if (collapsed) {
-    return (
-      <div className="control-panel collapsed" onClick={() => setCollapsed(false)}>
-        <span className="panel-toggle">EvoSphere</span>
-      </div>
-    );
-  }
-
   return (
-    <div className="control-panel">
-      <div className="panel-header">
-        <span className="panel-title">EvoSphere</span>
-        <button className="panel-toggle" onClick={() => setCollapsed(true)}>
-          &minus;
-        </button>
+    <>
+      {/* Floating action button */}
+      <button
+        className={`fab${open ? " fab-hidden" : ""}${paused ? " fab-paused" : ""}`}
+        onClick={() => setOpen(true)}
+        aria-label="Open controls"
+      >
+        ⚙
+      </button>
+
+      {/* Bottom sheet / side panel */}
+      <div className={`sheet${open ? " sheet-open" : ""}`} role="dialog" aria-modal="true">
+        <div className="sheet-handle" />
+
+        <div className="sheet-header">
+          <span className="sheet-title">EvoSphere</span>
+          <nav className="tab-bar">
+            {(["ctrl", "stats"] as TabId[]).map((t) => (
+              <button
+                key={t}
+                className={`tab-btn${tab === t ? " active" : ""}`}
+                onClick={() => setTab(t)}
+              >
+                {t === "ctrl" ? "Controls" : "Stats"}
+              </button>
+            ))}
+            {hasSelected && (
+              <button
+                className={`tab-btn${tab === "org" ? " active" : ""}`}
+                onClick={() => setTab("org")}
+              >
+                Org
+              </button>
+            )}
+          </nav>
+          <button className="sheet-close" onClick={() => setOpen(false)} aria-label="Close panel">
+            ✕
+          </button>
+        </div>
+
+        <div className="sheet-content">
+          {tab === "ctrl" && (
+            <div className="tab-pane">
+              <div className="action-row">
+                <button className={`action-btn${paused ? " active" : ""}`} onClick={togglePause}>
+                  {paused ? "▶ Resume" : "⏸ Pause"}
+                </button>
+                <button className="action-btn" onClick={handleCenterView}>
+                  ⊙ Center
+                </button>
+                <button className="action-btn danger" onClick={handleReset}>
+                  ↺ Reset
+                </button>
+              </div>
+              <label className="slider-wrap">
+                <span className="slider-label">
+                  Speed <span className="slider-value">{simSpeed}×</span>
+                </span>
+                <input
+                  type="range"
+                  min="1"
+                  max="5"
+                  step="1"
+                  value={simSpeed}
+                  onChange={(e) => handleSimSpeed(Number(e.target.value))}
+                />
+              </label>
+              <label className="slider-wrap">
+                <span className="slider-label">
+                  Food Rate <span className="slider-value">{foodRate.toFixed(1)}</span>
+                </span>
+                <input
+                  type="range"
+                  min="0"
+                  max="5"
+                  step="0.1"
+                  value={foodRate}
+                  onChange={(e) => handleFoodRate(Number(e.target.value))}
+                />
+              </label>
+              <label className="slider-wrap">
+                <span className="slider-label">
+                  Energy Cost <span className="slider-value">{energyCost.toFixed(1)}</span>
+                </span>
+                <input
+                  type="range"
+                  min="0.2"
+                  max="3"
+                  step="0.1"
+                  value={energyCost}
+                  onChange={(e) => handleEnergyCost(Number(e.target.value))}
+                />
+              </label>
+              <label className="slider-wrap">
+                <span className="slider-label">
+                  Mutation Rate <span className="slider-value">{mutationRate.toFixed(2)}</span>
+                </span>
+                <input
+                  type="range"
+                  min="0.01"
+                  max="0.5"
+                  step="0.01"
+                  value={mutationRate}
+                  onChange={(e) => handleMutationRate(Number(e.target.value))}
+                />
+              </label>
+              <div className="action-row">
+                <button className="action-btn" onClick={handleInjectFood}>
+                  + Food
+                </button>
+                <button className="action-btn danger" onClick={handleKill}>
+                  Kill 50%
+                </button>
+              </div>
+            </div>
+          )}
+
+          {tab === "stats" && (
+            <div className="tab-pane">
+              <StatsDisplay worldRef={worldRef} />
+            </div>
+          )}
+
+          {tab === "org" && (
+            <div className="tab-pane">
+              <SelectedOrganism worldRef={worldRef} selectedIdRef={selectedIdRef} />
+            </div>
+          )}
+        </div>
       </div>
-
-      <div className="panel-section">
-        <label>
-          <span className="slider-label">
-            Food Rate <span className="slider-value">{foodRate.toFixed(1)}</span>
-          </span>
-          <input
-            type="range"
-            min="0"
-            max="5"
-            step="0.1"
-            value={foodRate}
-            onChange={(e) => handleFoodRate(Number(e.target.value))}
-          />
-        </label>
-
-        <label>
-          <span className="slider-label">
-            Energy Cost <span className="slider-value">{energyCost.toFixed(1)}</span>
-          </span>
-          <input
-            type="range"
-            min="0.2"
-            max="3"
-            step="0.1"
-            value={energyCost}
-            onChange={(e) => handleEnergyCost(Number(e.target.value))}
-          />
-        </label>
-
-        <label>
-          <span className="slider-label">
-            Speed <span className="slider-value">{simSpeed}x</span>
-          </span>
-          <input
-            type="range"
-            min="1"
-            max="5"
-            step="1"
-            value={simSpeed}
-            onChange={(e) => handleSimSpeed(Number(e.target.value))}
-          />
-        </label>
-
-        <label>
-          <span className="slider-label">
-            Mutation Rate <span className="slider-value">{mutationRate.toFixed(2)}</span>
-          </span>
-          <input
-            type="range"
-            min="0.01"
-            max="0.5"
-            step="0.01"
-            value={mutationRate}
-            onChange={(e) => handleMutationRate(Number(e.target.value))}
-          />
-        </label>
-      </div>
-
-      <div className="panel-section panel-buttons">
-        <button onClick={handleInjectFood}>Inject Food</button>
-        <button onClick={handleKill} className="danger">
-          Kill 50%
-        </button>
-        <button onClick={togglePause}>{paused ? "Resume" : "Pause"}</button>
-        <button onClick={handleReset}>Reset</button>
-        <button onClick={handleCenterView}>Center View</button>
-      </div>
-
-      <div className="panel-section">
-        <StatsDisplay worldRef={worldRef} />
-      </div>
-
-      <SelectedOrganism worldRef={worldRef} selectedIdRef={selectedIdRef} />
-    </div>
+    </>
   );
 }
 
@@ -189,8 +257,8 @@ function SelectedOrganism({
   worldRef,
   selectedIdRef,
 }: {
-  worldRef: React.MutableRefObject<WorldState>;
-  selectedIdRef: React.MutableRefObject<number | null>;
+  worldRef: React.RefObject<WorldState>;
+  selectedIdRef: React.RefObject<number | null>;
 }) {
   const [info, setInfo] = useState<{
     id: number;
@@ -274,11 +342,10 @@ function SelectedOrganism({
     return () => clearInterval(interval);
   }, [worldRef, selectedIdRef]);
 
-  if (!info) return null;
+  if (!info) return <p className="empty-msg">Click an organism to inspect it.</p>;
 
   return (
-    <div className="panel-section">
-      <div className="stat-divider" />
+    <div className="stats">
       <div className="stat-label">Selected #{info.id}</div>
       <div className="stat-row">
         <span>State</span>

@@ -1,74 +1,238 @@
-.control-panel {
+/* ── FAB ─────────────────────────────────────────── */
+.fab {
   position: fixed;
   top: 16px;
   left: 16px;
-  z-index: 10;
-  background: rgba(12, 12, 20, 0.85);
+  z-index: 20;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(12, 12, 20, 0.9);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  padding: 16px;
-  min-width: 220px;
-  font-size: 13px;
   color: #c8c8d4;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    opacity 0.2s,
+    transform 0.2s,
+    background 0.15s;
+
+  &:hover {
+    background: rgba(30, 30, 50, 0.95);
+  }
+
+  &.fab-hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.8);
+  }
+
+  &.fab-paused::after {
+    content: "";
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #ff9955;
+  }
+}
+
+/* ── Sheet (mobile: bottom sheet) ───────────────── */
+.sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 15;
+  background: rgba(12, 12, 20, 0.93);
+  backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px 16px 0 0;
+  max-height: 65vh;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(100%);
+  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+  color: #c8c8d4;
+  font-size: 13px;
   user-select: none;
 
-  &.collapsed {
-    cursor: pointer;
-    padding: 10px 16px;
-    min-width: auto;
+  &.sheet-open {
+    transform: translateY(0);
+  }
+}
+
+/* ── Sheet (desktop: right side panel) ──────────── */
+@media (min-width: 640px) {
+  .sheet {
+    top: 0;
+    left: 0;
+    right: auto;
+    bottom: 0;
+    width: 260px;
+    max-height: none;
+    border-radius: 0 12px 12px 0;
+    border-top: none;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    transform: translateX(-110%);
+
+    &.sheet-open {
+      transform: translateX(0);
+    }
+  }
+
+  .sheet-handle {
+    display: none;
+  }
+}
+
+/* ── Drag handle ─────────────────────────────────── */
+.sheet-handle {
+  width: 36px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 2px;
+  margin: 10px auto 0;
+  flex-shrink: 0;
+}
+
+/* ── Sheet header ────────────────────────────────── */
+.sheet-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 0;
+  flex-shrink: 0;
+}
+
+.sheet-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e8e8f0;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+/* ── Tabs ────────────────────────────────────────── */
+.tab-bar {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 5px 4px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: #777;
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+
+  &:hover {
+    color: #bbb;
+  }
+
+  &.active {
+    background: rgba(124, 108, 255, 0.22);
+    color: #c8bcff;
+  }
+}
+
+.sheet-close {
+  background: none;
+  border: none;
+  color: #555;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: color 0.15s;
+
+  &:hover {
+    color: #aaa;
+  }
+}
+
+/* ── Sheet content ───────────────────────────────── */
+.sheet-content {
+  overflow-y: auto;
+  padding: 12px;
+  flex: 1;
+  overscroll-behavior: contain;
+}
+
+.tab-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ── Action row / buttons ────────────────────────── */
+.action-row {
+  display: flex;
+  gap: 6px;
+}
+
+.action-btn {
+  flex: 1;
+  padding: 8px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #c8c8d4;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+
+  &.active {
+    background: rgba(124, 108, 255, 0.2);
+    border-color: rgba(124, 108, 255, 0.4);
+    color: #c8bcff;
+  }
+
+  &.danger {
+    color: #ff6b6b;
+    border-color: rgba(255, 107, 107, 0.2);
 
     &:hover {
-      background: rgba(12, 12, 20, 0.95);
+      background: rgba(255, 107, 107, 0.1);
+      border-color: rgba(255, 107, 107, 0.4);
     }
   }
 }
 
-.panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.panel-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #e8e8f0;
-  letter-spacing: 0.5px;
-}
-
-.panel-toggle {
-  background: none;
-  border: none;
-  color: #888;
-  font-size: 18px;
-  cursor: pointer;
-  padding: 0 4px;
-  line-height: 1;
-
-  &:hover {
-    color: #ccc;
-  }
-}
-
-.panel-section {
-  margin-bottom: 12px;
-
-  &:last-child {
-    margin-bottom: 0;
-  }
-}
-
-.panel-section label {
+/* ── Sliders ─────────────────────────────────────── */
+.slider-wrap {
   display: block;
-  margin-bottom: 8px;
 }
 
 .slider-label {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   font-size: 12px;
   color: #999;
 }
@@ -89,8 +253,8 @@ input[type="range"] {
 
   &::-webkit-slider-thumb {
     appearance: none;
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
     background: #7c6cff;
     border: 2px solid rgba(255, 255, 255, 0.15);
@@ -98,49 +262,16 @@ input[type="range"] {
   }
 
   &::-moz-range-thumb {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
     background: #7c6cff;
-    border: 2px solid rgba(255, 255, 255, 0.15);
+    border: none;
     cursor: pointer;
   }
 }
 
-.panel-buttons {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-
-  button {
-    padding: 6px 10px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.05);
-    color: #c8c8d4;
-    font-size: 12px;
-    cursor: pointer;
-    transition:
-      background 0.15s,
-      border-color 0.15s;
-
-    &:hover {
-      background: rgba(255, 255, 255, 0.1);
-      border-color: rgba(255, 255, 255, 0.2);
-    }
-
-    &.danger {
-      color: #ff6b6b;
-      border-color: rgba(255, 107, 107, 0.2);
-
-      &:hover {
-        background: rgba(255, 107, 107, 0.1);
-        border-color: rgba(255, 107, 107, 0.4);
-      }
-    }
-  }
-}
-
+/* ── Stats ───────────────────────────────────────── */
 .stats {
   font-size: 12px;
 }
@@ -168,4 +299,13 @@ input[type="range"] {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 4px;
+}
+
+/* ── Empty state ─────────────────────────────────── */
+.empty-msg {
+  font-size: 12px;
+  color: #555;
+  text-align: center;
+  padding: 16px 0;
+  margin: 0;
 }
